@@ -1,0 +1,976 @@
+#!/usr/bin/env bash
+
+# -----------------------------------------------------------------------------
+# @title    mountssh
+# @desc     A portable SSHFS mounting utility script with network checks,
+#           timeout auto-unmounting, and remote config editing via terminal.
+# @author   Zyren
+# @version  1.0
+# @license  MIT
+# @repo     https://github.com/ZyrenVX/dotfiles
+# -----------------------------------------------------------------------------
+
+# Operation flags
+ENABLE_DEBUG=0    # Override debug config with --debug flag or manual toggle
+
+PROFILE_DIRECTORY='${HOME}/.sshfsProfiles'
+
+### Default Config Template (Do not touch it) ###
+declare -A CONFIG=(
+    # Remote SSH username
+    [USER]=""
+    # Remote host (IP or FQDN (Fully Qualified Domain Name))
+    [HOST]=""
+    # Remote path to mount
+    [REMOTE_MOUNT_POINT]=""
+    # Local mount point
+    [LOCAL_MOUNT_POINT]=""
+    # SSH Port (Usually 22)
+    [PORT]=""
+    # Path to SSH private key
+    [PRIVATE_KEY]=""
+    # Extra SSHFS options
+    [SSH_OPTIONS]=""
+    # Enable script debugging
+    [DEBUG]=0
+    # Enable colors
+    [COLORS]=1
+    # Ping timeout (sec) before mounting
+    [PING_TIMEOUT]=3
+    # Auto un-mount after N seconds (0 = disable)
+    [MOUNT_TIMEOUT]=0
+    # Permissions apply to Local mount point
+    [LOCAL_MOUNT_DIR_PERMS]=755
+)
+
+### Unified logging logging function
+# Supported log types: info | warn | error | debug
+function LOG() {
+    local type_="$1"
+    shift
+    local color
+    case "$type_" in
+        info)  color="${GREEN}" ;;
+        warn)  color="${ORANGE}" ;;
+        error) color="${RED}" ;;
+        debug)
+            [[ ${CONFIG[DEBUG]} -eq 1 || $ENABLE_DEBUG -eq 1 ]] || return
+            color="${DEBUG_GRAY}"
+            ;;
+        *) return ;;
+    esac
+    printf "[%b%b%b]: %b\n" "${color}" "${type_}" "${NC}" "$*"
+}
+
+# Show usage
+function Usage() {
+    local -i colors="$1"
+    if [[ $colors -eq 1 ]]; then
+        local RED='\033[0;31m'
+        local GREEN='\033[0;32m'
+        local YELLOW='\033[38;2;212;184;142m'
+        local BLUE='\033[38;2;126;117;255m'
+        local LIGHT_BLUE='\033[38;2;146;165;200m'
+        local BOLD='\033[1m'
+        local NC='\033[0m'
+    else
+        local RED=''
+        local GREEN=''
+        local YELLOW=''
+        local BLUE=''
+        local LIGHT_BLUE=''
+        local BOLD=''
+        local NC=''
+    fi
+
+    printf "%b\n" \
+        "${BOLD}${LIGHT_BLUE}MountSSHFS_filesystem - Portable SSHFS mount utility with network checks and auto unmount${NC}" \
+        "" \
+        "${BOLD}Usage:${NC}" \
+        "  ${YELLOW}$(basename "$0") [options]${NC}" \
+        "" \
+        "${BOLD}Filesystem Operations:${NC}"
+    printf "    ${GREEN}%-4s ${GREEN}%-32s${NC} %s\n" \
+        "-m"   "--mount|mount"        "Mount the SSHFS mount point" \
+        "-u"   "--umount|umount"      "Unmount the SSHFS mount point" \
+        ""     "--ssh|ssh"            "Directly SSH into remote"
+
+    printf "\n${BOLD}Profile Management:${NC}\n"
+    printf "    ${GREEN}%-4s ${GREEN}%-32s${NC} %b\n" \
+        "-p"   "--profile|profile"                  "Specify the profile name" \
+        "-e"   "--edit|edit"                        "Edit the SSHFS configuration file" \
+        "-l"   "--list-profiles|list-profiles"      "Show available profiles in ${BLUE}${PROFILE_DIRECTORY}${NC}" \
+        ""     "--show-profile|show-profile"        "Display and load a specific profile by name" \
+        ""     "--show|show"                        "loaded and show default or specified profile"
+
+    printf "\n${BOLD}Other Options:${NC}\n"
+    printf "    ${GREEN}%-4s ${GREEN}%-32s${NC} %s\n" \
+        "-c"   "--config|config"            "Specify the full path to config file" \
+        "-f"   "--force|force"              "Do not confirm" \
+        "-h"   "--help|help"                "Show this help message and exit" \
+        "-d"   "--debug|debug"              "Enable debug output" \
+        "-su"  "--sudo|sudo"                "Use sudo for mount/unmount operations" \
+        ""     "--cat|cat"                  "Concatenate the config file" \
+        ""     "--no-color"                 "Disable color output" \
+        ""     "--version"                  "Show script version"
+
+    printf "\n"
+    printf "%b\n" \
+        "${BOLD}Description:${NC}" \
+        "  This script mounts remote filesystems over SSHFS with automatic network checks," \
+        "  optional auto-unmount after a timeout, and supports editing configuration interactively." \
+        "" \
+        "${BOLD}Examples:${NC}" \
+        "  ${YELLOW}$(basename "$0") <profile>${NC}" \
+        "  Mount from profile. repeating this command remounts" \
+        "" \
+        "  ${YELLOW}$(basename "$0") edit <profile>${NC}" \
+        "  Opens the profile in your editor for modification." \
+        "" \
+        "  ${YELLOW}$(basename "$0") mount <profile>${NC}" \
+        "  Mounts the SSHFS filesystem from profile." \
+        "" \
+        "  ${YELLOW}$(basename "$0") u(n)mount <profile>${NC}" \
+        "  Unmounts the mounted SSHFS filesystem from profile." \
+        ""
+}
+
+# Immediately exit when FATAL is called
+function FATAL() {
+    local msg="$1"
+    local -i exit_code=$2
+    [[ $exit_code -gt 0 ]] && {
+        printf "\n%s\n%s\n" "$2 errors encountered" "$msg"
+        exit "$exit_code"
+    }
+}
+
+# Installs a package using the system's package manager
+# Detects pacman, apt, dnf, or yum
+
+function InstallTool() {
+    local -A pkg_map=(
+        [fuser]="psmisc"
+        [fusermount]="fuse3"
+        [sshfs]="sshfs"
+        [findmnt]="util-linux"
+        [lsof]="lsof"
+        [tree]="tree"
+    )
+    local -a pkgs=()
+    for bin in "$@"; do
+        local pkg="${pkg_map[$bin]:-$bin}"
+        pkgs+=("$pkg")
+    done
+
+    if command -v apt &> /dev/null; then
+        sudo apt install -y "${pkgs[@]}"
+    elif command -v pacman &> /dev/null; then
+        sudo pacman --needed -S "${pkgs[@]}"
+    elif command -v dnf &> /dev/null; then
+        sudo dnf install -y "${pkgs[@]}"
+    else
+        echo "Unsupported package manager. Please install manually: ${pkgs[*]}"
+        return 1
+    fi
+}
+
+function CheckDependencies() {
+    local -a deps=( sshfs ssh fuser tree fusermount findmnt lsof )
+    local -a not_found=()
+    local yesno=""
+
+    for cmd in "${deps[@]}"; do
+        command -v "$cmd" &> /dev/null || not_found+=("$cmd")
+    done
+
+    if [[ ${#not_found[@]} -gt 0 ]]; then
+        LOG error "${not_found[*]} Not found; Install it first."
+        printf "%s: " "Install ${not_found[*]} (y|n)"; read -r yesno
+        if [[ $yesno =~ ^(y|Y)$ ]]; then
+            InstallTool "${not_found[@]}" || FATAL "Exiting..." 1
+        else
+            FATAL "Exiting..." 1
+        fi
+    fi
+}
+
+# Auto-detects and sets a TUI text editor (Neovim > Vim > Nano) for config editing
+# Falls back to installing vim if none found
+function SetTextEditor() {
+    local -a Editors=( nvim vim micro nano )
+    local found=""
+    command -v ${EDITOR} &> /dev/null && found="${EDITOR}"
+    for editor in "${Editors[@]}"; do
+        if command -v nvim 1> /dev/null 2>&1; then
+            [[ -z ${found} ]] && found="${editor}"
+            break
+        fi
+    done
+    if [[ -z $found ]]; then
+        LOG warn "NO text editor found on your system"
+        LOG info "Installing vim"
+        InstallTool "vim"
+    fi
+    EDITOR=${found:-"vim"}
+}
+
+function SetColors() {
+    # ANSI escape sequences for RGB-based color output (eye candy logging in terminal)
+    local -i colors="$1"
+    LOG debug "Setting up colors"
+    if [[ $colors -eq 0 || ${CONFIG[COLORS]} -eq 0 ]]; then
+        RED='' GREEN='' BLUE='' DEBUG_GRAY='' LITTLE_BLUE='' YELLOW='' SKIN_COL='' GRAY='' ORANGE='' NC=''
+        return 0
+    fi
+    RED='\033[38;2;255;75;75m'
+    GREEN='\033[38;2;138;230;81m'
+    BLUE='\033[38;2;110;147;235m'
+    DEBUG_GRAY='\033[38;2;200;200;200m'
+    LITTLE_BLUE='\033[38;2;126;117;255m'
+    YELLOW='\033[38;2;226;220;120m'
+    SKIN_COL='\033[38;2;170;170;127m'
+    GRAY='\033[38;2;125;125;125m'
+    ORANGE='\033[38;2;255;170;10m'
+    NC='\033[0m'
+}
+
+function TermuxUser() {
+    ### Helping Messages for Termux user
+    LOG info "The termux default user home directory '${LITTLE_BLUE}${1:-""}/data/data/com.termux/files/home${NC}'"
+    LOG info "Phone's internal stroage filesystem '${LITTLE_BLUE}${1:-""}/storage/emulated/0/${NC}'"
+}
+
+function ColorPath() {
+    echo "$( sed "s@${HOME}@${LITTLE_BLUE//\\/\\\\}\${HOME}${NC//\\/\\\\}@g" <(printf "%s\n" "${1}") )"
+}
+
+function EvalVars() {
+    local string="$1"
+    sed -e "s@\${HOME}@${HOME}@g" -e "s@\$HOME@$HOME@g" \
+        -e "s@\${USER}@${USER}@g" -e "s@\$USER@$USER@g" \
+        -e "s@\${UID}@${UID}@g" -e "s@\$UID@${UID}@g" \
+        -e "s@\${GID}@${GID}@g" -e "s@\$GID@${GID}@g" <<< "${string}"
+}
+
+# Displays an ASCII-style script banner
+function DrawBanner() {
+  printf "%b\n" "${YELLOW}"
+  printf "%s\n" "=========================="
+  printf "%s\n" "║ SSHFS Mount Utility    ║"
+  printf "%s\n" "=========================="
+  printf "%b\n" "${NC}"
+}
+
+# Nicely formats and prints current loaded config to stdout
+# Triggered by --show or DEBUG=1
+function ShowConfigFile() {
+    local profile="$1"
+    local -i show_config="$2"
+    local -a LogVar=("printf" "# ${GRAY}%b${NC}\n# ${ORANGE}%-40b${NC} = %b\n\n")
+    local -a PrettyLog=("printf" "%b\n")
+
+    if [[ ${CONFIG[DEBUG]} -eq 1 || $show_config -eq 1 ]]; then
+        "${PrettyLog[@]}" \
+            "#================#" \
+            "# Profile: $(ColorPath ${profile}) #" \
+            "#=============#==========================#"
+        "${LogVar[@]}" \
+            "### SSH Username on the remote device" \
+            "USER" "\"${CONFIG[USER]}\"" \
+            "### Ip address or FQDN (Fully Qualified Domain Name) of the remote" \
+            "HOST" "\"${CONFIG[HOST]}\"" \
+            "### SSH Port to use for connection" \
+            "PORT" "${BLUE}${CONFIG[PORT]}${NC}" \
+            "### Remote path to mount" \
+            "REMOTE_MOUNT_POINT" "\"${CONFIG[REMOTE_MOUNT_POINT]}\"" \
+            "### Local directory or mount the remote path to" \
+            "LOCAL_MOUNT_POINT" "\"${CONFIG[LOCAL_MOUNT_POINT]}\"" \
+            "### Private key for SSH authentication" \
+            "PRIVATE_KEY" "\"${CONFIG[PRIVATE_KEY]}\"" \
+            "### Additional SSH options (e.g., -oreconnect)" \
+            "SSH_OPTIONS" "\"${CONFIG[SSH_OPTIONS]}"\" \
+            "### Enable bash script debugging (yes or no)" \
+            "DEBUG" "${BLUE}${CONFIG[DEBUG]}${NC}" \
+            "### Timeout in seconds to wait for the remote host to respond (Network check)" \
+            "PING_TIMEOUT" "${BLUE}${CONFIG[PING_TIMEOUT]}${NC}" \
+            "### Automatically unmount after this many seconds (0 to disable)" \
+            "MOUNT_TIMEOUT" "${BLUE}${CONFIG[MOUNT_TIMEOUT]}${NC}" \
+            "### Set permission mode (e.g., 755) for the mount directory after mounting" \
+            "LOCAL_MOUNT_DIR_PERMS" "${BLUE}${CONFIG[LOCAL_MOUNT_DIR_PERMS]}${NC}"
+    fi
+}
+
+# Writes CONFIG associative array values into a temporary bash-style config file
+# Used for persistence across script runs
+function WriteConfigTemplate() {
+    local file_name="$1"
+    local -i force=$2
+    local msg=""
+    local -i doesnotExist=0
+
+    if [[ "${file_name}" == "${default_config_profile}" ]]; then
+        LOG warn "Temporary config in use."
+        msg="[warn]: Temporary config in use. For persistence, create a user profile."
+    else
+        msg="Profile: ${file_name}"
+    fi
+
+    if [[ ! -f "${file_name}" ]]; then
+        doesnotExist=1
+        if [[ $force -eq 0 ]]; then
+            printf "'%b' does not exist. Create one (y|n): " "$(ColorPath ${file_name})"
+            read -r key
+            if ! [[ "${key}" =~ ^(y|Y|yes|Yes)$ ]]; then
+                return 1
+            fi
+        fi
+    fi
+
+cat > "${file_name}" << EOF
+#!/usr/bin/env bash
+
+### Configuration File for SSHFS Mounting
+
+## ${msg}
+
+### SSH Username on the remote device
+USER="${CONFIG[USER]:-"root"}"
+
+### Ip address or FQDN (Fully Qualified Domain Name) of the remote
+HOST="${CONFIG[HOST]:-"0.0.0.0"}"
+
+### SSH Port to use for connection
+PORT=${CONFIG[PORT]:-22}
+
+### Remote path to mount
+REMOTE_MOUNT_POINT="${CONFIG[REMOTE_MOUNT_POINT]:-"/"}"
+
+### Local directory or mount the remote path to
+LOCAL_MOUNT_POINT="${CONFIG[LOCAL_MOUNT_POINT]:-"/tmp/mount_$(basename "${file_name}")"}"
+
+### Private key for SSH authentication
+PRIVATE_KEY="${CONFIG[PRIVATE_KEY]}"
+
+### Additional SSH options (e.g., -oreconnect)
+SSH_OPTIONS="${CONFIG[SSH_OPTIONS]}"
+
+### Enable bash script debugging (yes or no)
+DEBUG=${CONFIG[DEBUG]}
+
+### Enable colors
+COLORS=1
+
+### Timeout in seconds to wait for the remote host to respond (Network check)
+PING_TIMEOUT=${CONFIG[PING_TIMEOUT]}
+
+### Automatically unmount after this many seconds (0 to disable)
+MOUNT_TIMEOUT=${CONFIG[MOUNT_TIMEOUT]}
+
+### Set permission mode (e.g., 755) for the mount directory before mounting
+LOCAL_MOUNT_DIR_PERMS=${CONFIG[LOCAL_MOUNT_DIR_PERMS]}
+
+# vim:filetype=bash
+
+EOF
+    [[ $doesnotExist -eq 1 ]] && LOG info "New Config file created: $(ColorPath ${file_name})" || return 0
+}
+
+function ValidateHost() {
+    local -a invalids=("0.0.0.0" "")
+    for i in "${invalids[@]}"; do
+        if [[ "${CONFIG[HOST]}" == "${i}" ]]; then
+            LOG error "Invalid SSH host: '${CONFIG[HOST]}'. Please edit your config."
+            FATAL "" 1
+        fi
+    done
+}
+
+function LoadConfigFile() {
+    local profile="$1"
+    local show_config="$2"
+    [[ -f "${profile}" ]] || FATAL "'${profile}' Not a regular file" 1
+    LOG debug "===>>> source ${profile}"
+    source "${profile}" || FATAL "Exiting..." 1
+    local -i exit_=0
+
+    local -a config_vars=(
+        USER HOST PORT PRIVATE_KEY
+        REMOTE_MOUNT_POINT LOCAL_MOUNT_POINT
+        SSH_OPTIONS DEBUG COLORS
+        PING_TIMEOUT MOUNT_TIMEOUT LOCAL_MOUNT_DIR_PERMS
+    )
+    IFS=$' '
+    for key in "${config_vars[@]}"; do
+        LOG debug "CONFIG[$key]=${!key}"
+        CONFIG[$key]="${!key}"
+        [[ -n "${CONFIG[$key]}" ]] || LOG debug "Empty variable CONFIG[$key]='${CONFIG[$key]}'"
+        unset "$key"
+    done
+    [[ -z "${CONFIG[USER]}" ]] && {
+        CONFIG[USER]="root"
+        LOG error "No SSH username given in the config. Assuming its root now."
+    }
+    [[ -z "${CONFIG[HOST]}" ]] && {
+        LOG error "No SSH hostname given Cannot load the config '$(ColorPath ${profile})'. Edit the config"
+        exit_=$((exit_ + 1))
+    }
+    [[ -z "${CONFIG[REMOTE_MOUNT_POINT]}" ]] && {
+        CONFIG[REMOTE_MOUNT_POINT]="/"
+        LOG error "No remote mount point given in the config. Assuming its ${LITTLE_BLUE}/${NC}"
+    }
+    [[ -z "${CONFIG[LOCAL_MOUNT_POINT]}" ]] && {
+        CONFIG[LOCAL_MOUNT_POINT]="/tmp/mount_$(basename "${profile}")"
+        LOG error "No local mount point given in the config. Assuming its ${LITTLE_BLUE}/tmp/mount_$(basename "${profile}")${NC}"
+    }
+
+    ShowConfigFile "${profile}" "$show_config"
+    FATAL "Counldn't load config profile properly" $exit_
+    return 0
+}
+
+# Prompts user interactively to fill in CONFIG values
+# Uses defaults when input is empty
+function GetConfig() {
+    # Inner function to prompt user, with default & message
+    local -i guess=0
+
+    get_useInput() {
+        declare -n ref="$1"       # name reference to the variable to fill
+        local prompt="$2"
+        local default="$3"
+        local default_msg="$4"
+
+        printf "%b%s%b" "${LITTLE_BLUE}" "$prompt" "${NC}"
+        [[ -n $default ]] && printf " [%s]" "$default"
+        printf ": "
+
+        read -r input
+
+        if [[ -z "$input" && -n "$default" ]]; then
+            ref="$default"
+            [[ -n "${default_msg}" ]] && echo -e "${default_msg}"
+        else
+            ref="$input"
+        fi
+    }
+
+    get_useInput CONFIG[USER] "User" "root" "Assuming you are root."
+
+    get_useInput CONFIG[HOST] "Host (IP or FQDN)" "" ""
+    if [[ -z ${CONFIG[HOST]} ]]; then
+        echo "Host is required, exiting."
+        return 1
+    fi
+
+    [[ "${CONFIG[USER]}" == u0_a* ]] && guess=8022 || guess=22
+    get_useInput CONFIG[PORT] "Port" "${guess}" "Assuming port ${guess}"
+    if [[ -z ${CONFIG[PORT]} ]]; then
+        echo "Port is required, exiting."
+        return 1
+    fi
+    get_useInput CONFIG[REMOTE_MOUNT_POINT] "Remote mount point" "/" "Default ${BLUE}/${NC}"
+    get_useInput CONFIG[LOCAL_MOUNT_POINT] "Local mount point" \
+        "/tmp/mount_$(basename "${config_profile}")" "default '${BLUE}/tmp/mount_$(basename "${config_profile}")${NC}'"
+    get_useInput CONFIG[MOUNT_TIMEOUT] "Mount timeout (seconds)" "0" "Default 0"
+    get_useInput CONFIG[SSH_OPTIONS] "SSH options" "" ""
+    get_useInput CONFIG[PRIVATE_KEY] "Private key" "" ""
+
+    # You can optionally unset get_useInput here if you want:
+    unset -f get_useInput
+}
+
+# Opens config file using $EDITOR
+# If config file doesn’t exist or is empty, creates it with defaults
+function EditConfig() {
+    SetTextEditor # Set the terminal text editor
+    local profile="$1"
+    local -i force_profile_creation=$2
+    if [[ ! -s "${profile}" ]]; then
+        WriteConfigTemplate "${profile}" "$force_profile_creation" || FATAL "Cannot write '$(ColorPath ${profile})'. Write aborted" 1
+    fi
+
+    if [[ -n "${profile}" ]]; then
+        LOG info "Editing $(ColorPath ${profile})"
+        ${EDITOR:-"vim"} "${profile}"
+    else
+        LOG error "No profile was given to edit"
+        FATAL "Exiting..." 1
+    fi
+}
+
+# Checks mount point, if exists mount exists attempt to unmount
+function AttemptUnMount() {
+    local -r mount="$1"
+
+    if [[ ! -d "${mount}" ]]; then
+        LOG warn "'${BLUE}${mount}${NC}' Does not exist"
+        return 2
+    fi
+
+    removeDir() {
+        if rmdir "${mount}" &> /dev/null; then
+            LOG info "Cleaned: ${BLUE}${mount}${NC}"
+        fi
+    }
+
+    # If it's a mount point
+    if mountpoint -q "${mount}"; then
+        LOG debug "Attempting to unmount: ${mount}"
+    else
+        LOG debug "Not a mount point: ${mount}"
+        removeDir
+        unset -f removeDir
+        return 0
+    fi
+
+    LOG debug "Using lazy unmount"
+    # Clean lazy unmount
+    if timeout 2 fusermount -uz "${mount}" &> /dev/null; then
+        LOG info "Successfully lazy unmount via fusermount: ${BLUE}${mount}${NC}"
+        removeDir
+        unset -f removeDir
+        return 0
+    else
+        LOG error "Mount failed"
+        LOG debug "Attempting lazy umount"
+        sudo umount -l "${mount}" &> /dev/null || {
+            LOG warn "Mount still stuck, likely a zombie"
+            unset -f removeDir
+            return 1
+        }
+        removeDir
+        unset -f removeDir
+        return 0
+    fi
+
+    LOG warn "fusermount -uz '${BLUE}${mount}${NC}' failed. Trying fallback methods"
+
+    # Check if anything holding the mount point
+    if command -v "lsof" &> /dev/null; then
+        LOG info "files still open:"
+        lsof +D "${mount}"
+    elif command -v "fuser" &> /dev/null; then
+        LOG info "Open files:"
+        fuser -vm "${mount}"
+    fi
+
+    # SSHFS tied to this mount
+    if timeout 2 findmnt -n -T "${mount}" | grep -q "${mount}"; then
+        LOG warn "${BLUE}${mount}${NC} is still mounted"
+    fi
+    # Try lazy unmount again
+    if timeout 2 fusermount -uz "${mount}" &> /dev/null; then
+        LOG info "Successfully unmount: ${BLUE}${mount}${NC}"
+        removeDir
+        unset -f removeDir
+        return 0
+    fi
+    # Final check in /proc/mounts
+    if grep -q "${mount}" /proc/mounts; then
+        LOG warn "Mount still listed in /proc/mounts — might be a zombie or stale mount"
+        LOG info "Final attempt with lazy unmount"
+        if sudo umount -l "${mount}" &>/dev/null; then
+            removeDir
+            unset -f removeDir
+            return 0
+        else
+            unset -f removeDir
+            return 1
+        fi
+    fi
+}
+
+function AttemptMount() {
+    local -a cmd=("$@")
+    for i in {1..3}; do
+        [[ $i -ge 2 ]] && LOG info "attemting mount $i"
+        LOG debug "Running: sshfs ${cmd[*]}"
+        sshfs "${cmd[@]}" && return 0
+        sleep $((i*2))
+    done
+    return 1
+}
+
+function HostReachable() {
+    LOG debug "ping -c 1 -W ${CONFIG[PING_TIMEOUT]} ${CONFIG[HOST]} &> /dev/null"
+    if ! ping -c 1 -W "${CONFIG[PING_TIMEOUT]}" "${CONFIG[HOST]}" &> /dev/null; then
+        LOG error "'${LITTLE_BLUE}${CONFIG[HOST]}${NC}' Not reachable, check the connection."
+        return 1
+    fi
+}
+
+function CheckMountPoint() {
+    local mountPoint="$1"
+    if [[ -z "${mountPoint}" ]]; then
+        LOG warn "mount point variable is empty"
+        return 1
+    fi
+    if command -v findmnt &> /dev/null; then
+        [[ $(findmnt -n -T "${mountPoint}" -o FSTYPE) == fuse* ]] && return 0 || return 1
+    else
+        grep -qF "${mountPoint}" /proc/mounts | grep -q fuse && return 0 || return 1
+    fi
+}
+
+function CreateLocalMount() {
+    local dir="$1"; shift
+    local -i perms=$1; shift
+    local -a sudo=("$@")
+    LOG debug "${sudo[*]}mkdir -p ${dir} &> /dev/null"
+    "${sudo[@]}"mkdir -p "${dir}" &> /dev/null || {
+        LOG error "Cannot create '${LITTLE_BLUE}${dir}${NC}'"
+        FATAL "Exiting..." 1
+    }
+    LOG debug "${sudo[*]}chmod ${perms} ${dir}"
+    "${sudo[@]}" chmod "${perms}" "${dir}" || {
+        LOG error "Cannot change permissions on '${LITTLE_BLUE}${dir}${NC}'"
+    }
+}
+
+function MountSSHFS_() {
+    local -a sshfs_cmd=("$@")
+
+    if CheckMountPoint "${CONFIG[LOCAL_MOUNT_POINT]}"; then
+        LOG info "${BLUE}${CONFIG[LOCAL_MOUNT_POINT]}${NC} is already mounted"
+        return 0
+    fi
+    # Create local mount point
+    LOG debug "If destination dir '${CONFIG[LOCAL_MOUNT_POINT]}' does not exist create it"
+    if [[ ! -d "${CONFIG[LOCAL_MOUNT_POINT]}" ]]; then
+        CreateLocalMount "${CONFIG[LOCAL_MOUNT_POINT]}" ${CONFIG[LOCAL_MOUNT_DIR_PERMS]} "${sudo[@]}"
+    fi
+
+    # Mount the remote or local device file system as a fuse.sshfs device using OpenSSH protocol
+    if AttemptMount "${sshfs_cmd[@]}"; then
+        echo && LOG info "Mounted $(mount | grep "${CONFIG[LOCAL_MOUNT_POINT]}")" | grep --color=always -E "${CONFIG[USER]}|${CONFIG[HOST]}"
+        [[ ${CONFIG[MOUNT_TIMEOUT]} -gt 0 ]] && {
+            LOG debug "(sleep ${CONFIG[MOUNT_TIMEOUT]} && ${sudo[*]} timeout --signal KILL 4 fusermount -u ${CONFIG[LOCAL_MOUNT_POINT]}) &"
+            (sleep ${CONFIG[MOUNT_TIMEOUT]} && "${sudo[@]}" timeout --signal KILL 4 fusermount -u "${CONFIG[LOCAL_MOUNT_POINT]}") &
+        }
+        [[ ${CONFIG[USER]} == u0_a* ]] && TermuxUser "${CONFIG[LOCAL_MOUNT_POINT]}"
+    else
+        LOG error \
+            "Failed to mount SSHFS remote:\
+     ${SKIN_COL}${CONFIG[USER]}${NC}@${ORANGE}${CONFIG[HOST]}${NC}:${LITTLE_BLUE}${CONFIG[REMOTE_MOUNT_POINT]}${NC}\
+     ${LITTLE_BLUE}${CONFIG[LOCAL_MOUNT_POINT]}${NC} on Port ${CONFIG[PORT]}"
+
+        LOG debug "===>>> Call AttemptUnMount()"
+        if AttemptUnMount "${CONFIG[LOCAL_MOUNT_POINT]}"; then
+            LOG info "Unmounted: ${BLUE}${CONFIG[LOCAL_MOUNT_POINT]}${NC}"
+        elif [[ $? -eq 1 ]]; then
+            LOG warn "Failed to Unmount ${BLUE}${CONFIG[LOCAL_MOUNT_POINT]}${NC}"
+            FATAL "Exiting..." 1
+        fi
+    fi
+}
+
+FindProfile() {
+    local query="$1"
+    local -n ref_var="$2"
+
+    LOG debug "Profile validation"
+    local profile=""
+    local base_profile=""
+    for profile in "${profile_dir}"/*; do
+        base_profile="$(basename "$profile")"
+        LOG debug "Checking current arg: $profile"
+        if [[ "${query}" == "${base_profile}" ]]; then
+            ref_var="${base_profile}"
+            return 0
+        elif [[ "${query}" == "default" ]]; then
+            ref_var="default"
+            return 0
+        fi
+    done
+    return 1
+}
+
+### Parses script arguments like --edit, --show, --sudo, --unmount, etc.
+# Sets flags for conditional execution later
+function main() {
+    local -a ARGS_ARR=("$@")
+    local -a sshfs_cmd=()
+    local -a sudo=()
+
+    # Flags
+    local -i mount=0 unmount=0 ssh_only_=0
+    local -i ls_config_dir=0 edit_config=0 show_config=0 cat_config=0 profile_loaded=0
+    local -i colors=1 force=0
+    local -i show_usage=0
+    local -i remove_profile=0
+
+    # This is default global profile if --profile is not passed
+    local -g default_config_profile="/tmp/.sshfsMountScriptConf"
+    local config_profile="${default_config_profile}"
+    local -g profile_dir="$(EvalVars "${PROFILE_DIRECTORY}")"
+    local requested_profile_base=""
+    local show_requested_profile=""
+
+    # Helper function for debug logging
+    log_debug() {
+        local msg="$1"
+        [[ $ENABLE_DEBUG -eq 1 ]] && LOG debug "$msg"
+    }
+
+    for (( i = 0; i < ${#ARGS_ARR[@]}; i++ )); do
+        arg="${ARGS_ARR[$i]}"
+        next_arg="${ARGS_ARR[$((i+1))]}"
+
+        case "$arg" in
+            -e|--edit|edit)
+                edit_config=1
+                ;;
+            -d|--debug|debug)
+                CONFIG[DEBUG]=1
+                ENABLE_DEBUG=1
+                ;;
+            -p|--profile|profile)
+                requested_profile_base="$next_arg"
+                ((i++))
+                ;;
+            -p=*|--profile=*profile=*)
+                requested_profile_base="${arg#*=}"
+                ;;
+            --show-profile|show-profile)
+                show_requested_profile="${next_arg}"
+                ((i++))
+                ;;
+            --show-profile=*|show-profile=*)
+                show_requested_profile="${arg#*=}"
+                ;;
+            -c|--config|config)
+                config_profile="$next_arg"
+                ((i++))
+                ;;
+            -c=*|--config=*|config=*)
+                config_profile="${arg#*=}"
+                ;;
+            --show|show)
+                show_config=1
+                ;;
+            --cat|cat)
+                cat_config=1
+                ;;
+            --rm|rm)
+                remove_profile=1
+                ;;
+            --ssh|ssh)
+                ssh_only_=1
+                ;;
+            -l|--list|--list-profiles|list-profiles)
+                ls_config_dir=1
+                ;;
+            -f|-force|force)
+                force=1
+                ;;
+            -su|--sudo|sudo)
+                sudo=("sudo" " ")
+                ;;
+            --no-color|--nocolor)
+                CONFIG[COLORS]=0
+                colors=0
+                ;;
+            -m|--mount|mount)
+                mount=1
+                ;;
+            -u|--umount|--unmount|umount|unmount)
+                unmount=1
+                ;;
+            -h|--help|help)
+                show_usage=1
+                ;;
+            *)
+                LOG debug "Find Profiles"
+                FindProfile "${arg}" "requested_profile_base"
+                if [[ "${requested_profile_base}" != "${arg}" ]]; then
+                    LOG error "Invalid argument: $arg"
+                    FATAL "Exiting..." 1
+                fi
+                ;;
+        esac
+    done
+
+    # SetColors $colors
+    SetColors $colors
+
+    if [[ $show_usage -eq 1 ]]; then
+        Usage $colors && exit 0
+    fi
+
+    CheckDependencies
+
+    LOG debug "===>>> Call SetColors"
+
+    mkdir -p "${profile_dir}"
+    if [[ $ls_config_dir -eq 1 ]]; then
+        echo && LOG info "Available Profiles:\n"
+        tree -C "${profile_dir}"
+        return 0
+    fi
+
+    if [[ -n "${requested_profile_base}" || -n "${show_requested_profile}" ]]; then
+        local requested="" base="" should_show_config=0 config_exists=0
+        if [[ -n "${show_requested_profile}" ]]; then
+            requested="${show_requested_profile}"
+            should_show_config=1
+        elif [[ -n "${requested_profile_base}" ]]; then
+            requested="${requested_profile_base}"
+        fi
+
+        LOG debug "Find Profiles"
+        FindProfile "${requested}" "base"
+        if [[ -s "${profile_dir}/${base}" && -f "${profile_dir}/${base}" ]]; then
+            config_profile="${profile_dir}/${base}"
+            config_exists=1
+        else
+            if [[ "${requested}" != "default" ]]; then
+                if ! WriteConfigTemplate "${profile_dir}/${requested}" "$force"; then
+                    LOG warn "requested profile '$(ColorPath ${profile_dir}/${requested})' write abort" 1
+                    config_exists=0
+                fi
+                config_profile="${profile_dir}/${requested}"
+            fi
+
+        fi
+
+        if [[ "$(basename ${config_profile})" == "default" ]]; then
+            config_profile="${default_config_profile}"
+            config_exists=1
+        fi
+
+        if [[ $config_exists -eq 1 && $profile_loaded -eq 0 ]]; then
+            LOG debug "===>>> Call LoadConfigFile()"
+            LoadConfigFile "${config_profile}" "$should_show_config" && profile_loaded=1
+        fi
+        unset requested base should_show_config config_exists
+    fi
+
+    if [[ $edit_config -eq 1 && $remove_profile -eq 1 ]]; then
+        [[ -f "${config_profile}" ]] && rm "${config_profile}" && LOG info "[!] Removed '$(ColorPath ${config_profile})'"
+        EditConfig "${config_profile}" "$force"
+        return 0
+    elif [[ $edit_config -eq 1 ]]; then
+        EditConfig "${config_profile}" "$force"
+        return 0
+    elif [[ $remove_profile -eq 1 ]]; then
+        [[ -f "${config_profile}" ]] && rm "${config_profile}" && LOG info "[!] Removed '$(ColorPath ${config_profile})'"
+        return 0
+    fi
+
+    # Prompt user to provide config interactively and save the config
+    if [[ ! -s "${config_profile}" ]]; then
+        [[ -f ${config_profile} ]] && LOG warn "Config doesn't exist or empty. Edit it or Fill the details"
+        # Get config values
+        LOG debug "===>>> Call GetConfig()"
+        GetConfig || FATAL "User interuppted the process" 1
+        # After getting values, write to config
+        LOG debug "===>>> Call WriteConfigTemplate()"
+        WriteConfigTemplate "${config_profile}" "$force" || FATAL "" 1
+    fi
+
+    # Load the profile
+    if [[ $profile_loaded -eq 0 ]]; then
+        LOG debug "===>>> call loadconfigfile()"
+        LoadConfigFile "${config_profile}" $show_config
+        [[ $show_config -eq 1 && $# -gt 1 ]] && show_config=0
+    fi
+
+    if [[ "$cat_config" -eq 1 ]]; then
+        LOG info "Profile: $(ColorPath ${config_profile})" && echo
+        if command -v bat &> /dev/null; then
+            [[ $colors -eq 1 ]] && bat --paging=never --color=always --decorations=never --language=bash "${config_profile}" || \
+                bat --paging=never --color=never --decorations=never --language=bash "${config_profile}"
+            return 0
+        else
+            cat "${config_profile}"
+            return 0
+        fi
+    fi
+    LOG debug "===>>> Call SetColors()"
+    SetColors $colors
+
+    # Handles forced unmounting if its already mounted or --unmount is used
+    if  [[ $unmount -eq 1 ]] || { [[  ssh_only_ -ne 1 ]] && CheckMountPoint "${CONFIG[LOCAL_MOUNT_POINT]}"; }; then
+        AttemptUnMount "${CONFIG[LOCAL_MOUNT_POINT]}";
+        if [[ $? -eq 1 ]]; then
+            LOG warn "Failed to Unmount ${BLUE}${CONFIG[LOCAL_MOUNT_POINT]}${NC}"
+            FATAL "Exiting..." 1
+        fi
+    fi
+
+    # Fill sshfs_cmd array with sshfs flags and parameters
+    [[ -n ${CONFIG[PRIVATE_KEY]} ]] && [[ -r "${CONFIG[PRIVATE_KEY]}" ]] && {
+        sshfs_cmd+=("-o" "IdentitiesOnly=yes" "-o" "IdentityFile=${CONFIG[PRIVATE_KEY]}")
+    }
+    [[ -n "${CONFIG[SSH_OPTIONS]}" ]] && sshfs_cmd+=("-o" "${CONFIG[SSH_OPTIONS]}")
+    [[ -z ${CONFIG[PORT]} && "${CONFIG[USER]}" == u0_a* ]] && CONFIG[PORT]=8022
+    [[ -z ${CONFIG[PORT]} ]] && CONFIG[PORT]=22
+    [[ -n ${CONFIG[PORT]} ]] && sshfs_cmd+=("-o" "ssh_command=ssh -p ${CONFIG[PORT]}")
+    sshfs_cmd+=("${CONFIG[USER]:="root"}@${CONFIG[HOST]}:${CONFIG[REMOTE_MOUNT_POINT]:="/"}")
+    sshfs_cmd+=("${CONFIG[LOCAL_MOUNT_POINT]:="/tmp/DEFAULT_MOUNT"}")
+
+    if [[ $ssh_only_ -eq 1 && $mount -eq 1 ]]; then
+        ValidateHost
+        # Before mounting or SSH, check if remote is alive and listening
+        HostReachable || FATAL "Exiting..." 1
+
+        LOG debug "===>>> Call DrawBanner()"
+        DrawBanner
+
+        if [[ $profile_loaded -eq 0 ]]; then
+            LOG debug "===>>> Call LoadConfigFile()"
+            LoadConfigFile "${config_profile}" $show_config
+        fi
+
+        LOG info "Mount and SSH into remote"
+        echo && LOG info "Mounting remote: '${CONFIG[HOST]}' from profile $(ColorPath ${config_profile})"
+        MountSSHFS_ "${sshfs_cmd[@]}"
+        ### Log the final messages
+
+        echo && LOG info "SSH into '${CONFIG[HOST]}' from profile $(ColorPath ${config_profile})" && echo
+        ssh -p "${CONFIG[PORT]}" "${CONFIG[USER]-"root"}@${CONFIG[HOST]}"
+    fi
+
+    if [[ $ssh_only_ -eq 1 ]]; then
+        ValidateHost
+        # Before SSH, check if remote is alive and listening
+        HostReachable || FATAL "Exiting..." 1
+
+        if [[ $profile_loaded -eq 0 ]]; then
+            LOG debug "===>>> Call LoadConfigFile()"
+            LoadConfigFile "${config_profile}" $show_config
+        fi
+
+        echo && LOG info "SSH into '${CONFIG[HOST]}' from profile $(ColorPath ${config_profile})" && echo
+        LOG debug "===>>> Call DrawBanner()"
+        DrawBanner
+        [[ ${CONFIG[USER]} == u0_a* ]] && TermuxUser ""
+        ssh -p "${CONFIG[PORT]}" "${CONFIG[USER]-"root"}@${CONFIG[HOST]}"
+    fi
+
+    [[ -f "${config_profile}" ]] || return 1
+
+    ## Execute this block --mount -m given
+    if [[ $mount -eq 1 ]] || [[ $# -eq 1 && $show_config -eq 0 ]]; then
+        [[ $# -eq 1 ]] && LOG info "No action specified defaulting to mount"
+
+        ValidateHost
+        # Before mounting, check if remote is alive and listening
+        HostReachable || FATAL "Exiting..." 1
+
+        if [[ $profile_loaded -eq 0 ]]; then
+            log debug "===>>> call loadconfigfile()"
+            loadconfigfile "${config_profile}" $show_config
+        fi
+
+        LOG debug "===>>> Call DrawBanner()"
+        DrawBanner
+
+        echo && LOG info "Mounting remote: '${CONFIG[HOST]}' from profile $(ColorPath ${config_profile})"
+        MountSSHFS_ "${sshfs_cmd[@]}"
+    fi
+}
+
+main "$@"
+

@@ -1,0 +1,52 @@
+# If not running interactively, don't do anything
+[[ $- != *i* ]] && return
+
+#!/bin/bash
+
+# [[ Debian ]]
+# || User@Host ~ $ ||
+# PS1="\[\033[1m\]\[\033[38;2;80;24;230m\]||\[\033[0m\] \[\033[1m\]\[\033[3m\]\[\033[1;32m\]\$(whoami)\[\e[0m\]@\[\033[1m\]\[\033[3m\]\[\033[38;2;140;10;160m\]\$(hostname)\[\033[0m\]\[\e[m\] \[\e[0;36m\]\w\[\e[m\] $ \[\033[1m\]\[\033[38;2;80;24;230m\]||\[\033[0m\] "
+# echo
+
+# [[ User@Host ~ $ ]]
+# PROMPT="%B%F{cyan}[[%b %B%F{#04ff5f}%n%b%F{white}%F{grey}%B@%b%B%F{#4A8DAF}%m%b %B%F{cyan}%~%b%F{white} $ %B%F{cyan}]]%b%f "
+
+
+# [[ Arch ]]
+
+# || User@Host ~ $ ||
+# PS1="\[\033[1m\]\[\033[38;2;80;24;230m\]||\[\033[0m\]\[\033[1m\]\[\033[3m\]\[\033[1;32m\]\$(whoami)\[\e[0m\]@\[\033[1m\]\[\033[3m\]\[\033[38;2;140;10;160m\]\$(hostname)\[\033[0m\]\[\e[m\] \[\e[0;36m\]\w\[\e[m\] $ \[\033[1m\033[38;2;80;24;230m\]||\[\033[0m\] "
+
+
+[[ $- != *i* ]] && return
+
+light_green="\[\033[38;2;163;240;96m\]"
+host_color="\[\033[38;2;231;245;180m\]"
+dir_color="\[\033[38;2;89;159;240m\]"
+branch_col="\[\033[38;2;129;137;223m\]"
+hl="\[\033[1m\]"
+nc="\[\033[0m\]"
+
+opening_bracket="${light_green}[[${nc}"
+closing_bracket="${light_green}]]${nc}"
+username="${light_green}\u${nc}"
+hostname="${host_color}\h${nc}"
+workingdirectory="${dir_color}\w${nc}"
+
+function show_current_branch() {
+    local blue="\033[38;2;0;200;200m"
+    local branch="$(git symbolic-ref --short HEAD 2> /dev/null)"
+    if [[ -n "${branch}" ]]; then
+        echo "${blue}(${nc}${branch_col}${branch}${nc}${blue})${nc} "
+    else
+        echo ""
+    fi
+}
+
+# Custom Bash prompt by me — for color-coded, Git-aware shell
+
+PROMPT_COMMAND='PS1="${opening_bracket} ${username}@${hostname}:${workingdirectory} ${closing_bracket} $ $(show_current_branch)"'
+
+source "$HOME/.cargo/env" 2> /dev/null
+source "$HOME/.shell_rc" 2> /dev/null
+
