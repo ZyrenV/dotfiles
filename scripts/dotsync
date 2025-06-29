@@ -1,0 +1,493 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+IFS=$'\n\t'
+
+CONFIG_FILE="${HOME}/.dotsync.config"
+
+# command in use to copy stuff
+SYNC_="rsync"
+
+# LOG=0 ERROR=1 INFO=2 DEBUG=3
+LOG_LEVEL=1
+
+declare -a FILES_TO_COPY=()
+declare -a DIRS_TO_COPY=()
+
+# ASCII colors
+GREEN="\033[38;2;42;204;126m"
+BLUE="\033[38;2;121;118;214m"
+PURPLE="\033[38;2;233;132;64m"
+YELLOW="\033[38;2;238;209;113m"
+RED="\033[38;2;255;10;10m"
+NC="\033[0m"
+HL="\033[1m"
+
+# Temporary variable
+MSG=""
+
+function ERROR() {
+    [[ $LOG_LEVEL -ge 1 ]] && {
+        echo -e "[${HL}${RED}ERROR${NC}]: $@"
+    } || {
+        return 0
+    }
+}
+
+function INFO() {
+    [[ $LOG_LEVEL -ge 2 ]] && {
+        echo -e "[${HL}${GREEN}INFO${NC}]: $@"
+    } || {
+        return 0
+    }
+}
+
+function DEBUG_LOG() {
+    [[ $LOG_LEVEL -ge 3 ]] && {
+        echo -e "[${HL}${YELLOW}DEBUG_LOG${NC}]: $@"
+    } || {
+        return 0
+    }
+}
+
+function ColorPath() {
+    echo "$( sed "s@${HOME}@${BLUE//\\/\\\\}\${HOME}${NC//\\/\\\\}@g" <(printf "%s\n" "${1}") )"
+}
+
+function CreateConfig() {
+    local config="$1"
+    cat > "${config}" << EOF
+#!/usr/bin/env bash
+
+GIT_DIR="\${HOME}/repos/Dotfiles"
+
+# Your GitHub username
+USERNAME=""
+# Your GitHub repository
+REPO_NAME=""
+
+CONF_DIR="\${HOME}/.config"
+
+### File to file Copy
+FILES_TO_COPY=(
+    "/etc/vimrc|\${GIT_DIR}/vim/vimrc"
+    "/etc/xdg/nvim/init.vim|\${GIT_DIR}/neovim/init.vim"
+    "\${HOME}/.shell_rc|\${GIT_DIR}/shell/SHELL_RC"
+    "\${HOME}/.bashrc|\${GIT_DIR}/shell/bashrc"
+)
+
+### Directory to Directory Copy
+DIRS_TO_COPY=(
+    "\${HOME}/.bin|\${GIT_DIR}/scripts|1"
+    "\${CONF_DIR}/hypr|\${GIT_DIR}/hyprland|1"
+    "\${CONF_DIR}/sway|\${GIT_DIR}/sway|1"
+    "\${CONF_DIR}/i3|\${GIT_DIR}/i3|1"
+    "\${CONF_DIR}/waybar|\${GIT_DIR}/waybar|1"
+    "\${CONF_DIR}/wofi|\${GIT_DIR}/wofi|1"
+    "\${CONF_DIR}/qutebrowser|\${GIT_DIR}/qutebrowser|1"
+    "\${CONF_DIR}/yazi|\${GIT_DIR}/yazi|1"
+    "\${CONF_DIR}/foot|\${GIT_DIR}/foot|1"
+    "\${CONF_DIR}/kitty|\${GIT_DIR}/kitty|1"
+    "\${CONF_DIR}/alacritty|\${GIT_DIR}/alacritty|1"
+)
+
+# vim:filetype=bash
+
+EOF
+    if [[ $? -eq 0 ]]; then
+        INFO "Created: '$(ColorPath "${config_file}")'"
+    else
+        ERROR "Creating '$(ColorPath "${config_file}")'"
+        return 1
+    fi
+    return 0
+}
+
+function ValidatePaths() {
+    local -n indexed_array="$1"
+    local valid=0
+    for pair in "${indexed_array[@]}"; do
+        IFS=$'|' read -r src dest <<< "${pair}"
+        if [[ ! -e "${src}" ]]; then
+            ERROR "Invalid path: $src"
+            valid=1
+        elif [[ ! -e "${dest}" ]]; then
+            ERROR "Invalid path: $dest"
+            valid=1
+        fi
+    done
+    return $valid
+}
+
+function ValidateDirPaths() {
+    local -n indexed_array="$1"
+    local valid=0
+    for pair in "${indexed_array[@]}"; do
+        IFS=$'|' read -r src dest recursive_flag <<< "${pair}"
+        if [[ ! -e "${src}" ]]; then
+            ERROR "Invalid path: ${src}"
+            valid=1
+        elif [[ ! -e "${dest}" ]]; then
+            ERROR "Invalid path: ${dest}"
+            valid=1
+        elif [[ -z $recursive_flag ]]; then
+            ERROR "Recursive flag not given to '$(ColorPath "${pair}")'"
+            valid=1
+        fi
+    done
+    return $valid
+}
+
+function SourceConfig() {
+    local config_file="$1"
+    if [[ -s "${config_file}" && -f "${config_file}" ]]; then
+        source "${config_file}" || ERROR "Failed to source '${config_file}'"
+    else
+        ERROR "'$(ColorPath "${config_file}")' not found"
+        CreateConfig "${config_file}"
+    fi
+    return 0
+}
+
+function EditConfig() {
+    local config_file="$1"
+    if [[ ! -s "${config_file}" || ! -f "${config_file}" ]]; then
+        CreateConfig "${config_file}"
+    fi
+    ${EDITOR:-vim} "${config_file}"
+}
+
+function CopyFiles() {
+    local src_="$1"
+    local dest_="$2"
+    local -a cmd_flags=()
+
+    if [[ ! -f "${src_}" ]]; then
+        ERROR "Source '${BLUE}${src_}${NC}' file does not exist"
+        return 1
+    fi
+
+    if [[ "$SYNC_" != "rsync" ]]; then
+        ERROR "Deletion of orphanes requires 'rsync'. Current: '$SYNC_'"
+        return 1
+    fi
+
+    mkdir --parents -- "$(dirname "${dest_}")"
+
+    if [[ "$SYNC_" == "rsync" ]]; then
+        [[ $LOG_LEVEL -ge 2 ]] && cmd_flags+=( "--progress" )
+        cmd_flags+=( "--archive" )
+    elif [[ "$SYNC_" == "cp" ]]; then
+        [[ $LOG_LEVEL -ge 2 ]] && cmd_flags+=( "--verbose" )
+        cmd_flags+=( "--archive" )
+        cmd_flags+=( "--recursive" "--no-target-directory"  )
+    fi
+
+    if $SYNC_ "${cmd_flags[@]}" "${src_}" "${dest_}"; then
+        INFO "Copied '${GREEN}$(ColorPath ${src_})${NC}' ${PURPLE}--->${NC} '${BLUE}$(ColorPath ${dest_})${NC}'"
+    else
+        ERROR "Copy Failed: ${src_} --> ${dest_}"
+    fi
+}
+
+function CopyDirs() {
+    local src_="$1"
+    local dest_="$2"
+    local -i delete_flag=$3
+    local -a cmd_flags=()
+
+    if [[ ! -d "${src_}" ]]; then
+        ERROR "Source '${BLUE}${src_}${NC}' directory does not exist"
+        return 1
+    fi
+
+    if [[ "$SYNC_" != "rsync" && $delete_flag -eq 1 ]]; then
+        ERROR "Deletion of orphanes requires 'rsync'. Current: '$SYNC_'"
+        return 1
+    fi
+
+    mkdir --parents -- "${dest_}"
+
+    if [[ "$SYNC_" == "rsync" ]]; then
+        [[ $LOG_LEVEL -ge 2 ]] && cmd_flags+=( "--progress" )
+        [[ $delete_flag -eq 1 ]] && cmd_flags+=( "--delete" )
+        cmd_flags+=( "--archive" )
+    elif [[ "$SYNC_" == "cp" ]]; then
+        [[ $LOG_LEVEL -ge 2 ]] && cmd_flags+=( "--verbose" )
+        cmd_flags+=( "--archive" "--no-target-directory"  )
+    fi
+
+    if $SYNC_ "${cmd_flags[@]}"  "${src_}/" "${dest_}/"; then
+        INFO "Copied '${GREEN}$(ColorPath ${src_})${NC}' ${PURPLE}--->${NC} '${BLUE}$(ColorPath ${dest_})${NC}'"
+    else
+        ERROR "Copy Failed: ${src_} --> ${dest_}"
+    fi
+}
+
+function CloneRepo() {
+    local DIR="$1"
+
+    [[ -z "${USERNAME}" && -z "${REPO_NAME}" ]] && {
+        ERROR "No github username or repo name is given"
+        exit 1
+    }
+
+    if [[ -z "${DIR}" ]]; then
+        INFO "No directory given. Using your current directory to clone"
+        DIR="$(realpath .)/${REPO_NAME}"
+    else
+        DIR="$(realpath $1)/${REPO_NAME}"
+    fi
+
+    DEBUG_LOG "Getting dotfile repo from github"
+    INFO "Cloning your repository at: $DIR"
+    git clone "https://github.com/${USERNAME}/${REPO_NAME}.git" "${DIR}" && \
+        INFO "Repository clone at '${BLUE}$(ColorPath ${DIR})${NC}'"
+}
+
+function PushToRepo() {
+    local force="$1"
+    local satisfied=""
+    local should_continue=""
+    local should_commit=""
+    local commit_template_file=""
+
+    for file in ~/.git_commit_template_file ~/.gitmessage ~/.git_template; do
+        [[ -s "${file}" ]] && commit_template_file="${file}"
+    done
+
+    [[ -z "${commit_template_file}" ]] && commit_template_file=<( printf "[tag] module: what changed\n\n" )
+
+    if [[ -z "${USERNAME}" ]]; then
+        ERROR "'USERNAME' is empty update your '$(ColorPath "${CONFIG_FILE}")'"
+        return 1
+    fi
+    if [[ -z "${REPO_NAME}" ]]; then
+        ERROR "'REPO_NAME' is empty update your '$(ColorPath "${CONFIG_FILE}")'"
+        return 1
+    fi
+
+    cd "${GIT_DIR}"
+
+    if ! git diff --quiet ; then
+        INFO "Launching git interactive git add"
+        git add -p || {
+            ERROR "Interactive staging failed"
+            return 1
+        }
+    fi
+    INFO "Summary of staged changes"
+    git diff --staged --stat
+
+    printf "%s: " "Are you saisfied with changes? (y|n)"; read -r satisfied
+
+    if [[ "${satisfied}" =~ ^(y|yes|Yes)$ ]]; then
+        printf "%s: " "Commit? (y|n)"; read -r should_commit
+        [[ "${should_commit}" =~ ^(y|yes|Yes)$ ]] || return 1
+        if git commit --template="${commit_template_file}"; then
+            INFO "Successfully commited the changes"
+        else
+             if ! git diff --quiet --staged && git diff --quiet --staged; then
+                 ERROR "Commit failed" && exit 1
+             fi
+        fi
+    else
+        INFO "Commit aborted"
+        printf "%s: " "Continue to commit?"; read -r should_continue
+        [[ "${should_continue}" =~ ^(y|yes|Yes)$ ]] || exit 1
+    fi
+    INFO "Pushing changes to git@github.com:${USERNAME}/${REPO_NAME}.git"
+    git push "git@github.com:${USERNAME}/${REPO_NAME}.git" $(git symbolic-ref --short HEAD) ${force} && \
+        INFO "Successfully pushed your changes to github repository"
+}
+
+function Cleanup() {
+    ERROR "${RED}Sync interrupted. Clean up manually.${NC}" && exit 1
+}
+
+function Usage() {
+    printf "%b\n" \
+    "${HL}Backup - Your Dotfiles Backup and Sync Script${NC}" \
+    "" \
+    "Usage:" \
+    "  BackUp [options]" \
+    ""  \
+    "Options:" \
+    "  -h, --help            Show this help message and exit" \
+    "  -v, --verbose         Set verbose output (LOG_LEVEL=1)" \
+    "  -l=N, --log=N         Set log level (0=none, 1=error, 2=info, 3=debug)" \
+    "  -d, --debug           Enable debug level logging (LOG_LEVEL=3)" \
+    "  -e, --edit            Edit the config file" \
+    "  -g, --git-status      Show git status of your dotfile repo after backup" \
+    "  -c DIR, --clone DIR   Clone your dotfile repo to specified DIR (local path)" \
+    "  -m MSG, --msg MSG     Commit message for git push" \
+    "  -p, --push            Push changes to your remote GitHub repository" \
+    "  --force               Force git push with --force flag" \
+    ""  \
+    "Description:" \
+    "  This script copies your important config files and directories into a" \
+    "  local git repository (${BLUE}${GIT_DIR}${NC}) for backup and version control." \
+    "  You can optionally clone your dotfiles repo, push changes, and see git status." \
+    "" \
+    "GitHub repo info:" \
+    "  Username: ${BLUE}${USERNAME}${NC}" \
+    "  Repository: ${BLUE}${REPO_NAME}${NC}"
+}
+
+trap Cleanup SIGINT SIGTERM
+
+function main() {
+    # An array to hold all the given flags
+    local -a flagArr=("$@")
+
+    # 1 for git status 0 for no git status
+    local git_status=0
+
+    # Toggle push or pull
+    local should_push=0
+    local should_clone=0
+    # Clone directory
+    local clone_dir=""
+
+    # string '--force'
+    local force=""
+
+    for (( i=0 ; i < ${#flagArr[@]} ; i++ )); do
+        arg="${flagArr[$i]}"
+        if [[ "${arg}" == -* ]]; then
+            case "${arg}" in
+                -v|--verbose|--progress|verbose)
+                    LOG_LEVEL=1
+                    DEBUG_LOG "Verbose is set"
+                    ;;
+                -l=*|--log=*|log=*|--loglevel=*|loglevel=*)
+                    LOG_LEVEL=${arg#*=}
+                    if [[ -z ${LOG_LEVEL} || ${LOG_LEVEL} == -* ]] || [[ ! ${LOG_LEVEL} =~ ^[0-9]+$ ]]; then
+                        LOG_LEVEL=1
+                    elif [[ $LOG_LEVEL -gt 3 ]]; then
+                        DEBUG_LOG "LOG_LEVEL has no effect over integer ${LOG_LEVEL}"
+                    fi
+                    [[ $LOG_LEVEL -ge 3 ]] && DEBUG_LOG "Debugging enabled"
+                    ;;
+                -l|--log|log|--loglevel|loglevel)
+                    LOG_LEVEL=${flagArr[$(( i + 1 ))]:-1}
+
+                    if [[ -z ${LOG_LEVEL} || ${LOG_LEVEL} == -* ]]; then
+                        LOG_LEVEL=1
+                    elif [[ $LOG_LEVEL -gt 3 ]]; then
+                        DEBUG_LOG "LOG_LEVEL has no effect over integer ${LOG_LEVEL}"
+                    fi
+                    [[ $LOG_LEVEL -ge 3 ]] && DEBUG_LOG "Debugging enabled"
+                    i=$(( i + 1 ))
+                    ;;
+                -d|-db|--db|--deb|--debug|debug)
+                    LOG_LEVEL=2
+                    DEBUG_LOG "Debugging enabled"
+                    ;;
+                -g|-gs|--gs|--status|--git-status|g)
+                    git_status=1
+                    DEBUG_LOG "git_status is set"
+                    ;;
+                -e|--edit|edit)
+                    EditConfig "${CONFIG_FILE}"
+                    return 0
+                    ;;
+                -c|--clone|--clone-local|clone)
+                    clone_dir="${flagArr[$(( i + 1 ))]}"
+                    [[ -n "${clone_dir}" ]] && {
+                        i=$(( i + 1 ))
+                    }
+                    should_clone=1
+                    ;;
+                -c=*|--clone=*|--clone-local=*|clone=*)
+                    clone_dir="${arg#*=}"
+                    should_clone=1
+                    ;;
+                -m|-msg|--msg)
+                    MSG="${flagArr[$(( i + 1 ))]}"
+                    [[ -n "${MSG}" ]] && {
+                        i=$(( i + 1 ))
+                    }
+                    should_clone=1
+                    ;;
+                -p|--push|push)
+                    should_push=1
+                    LOG_LEVEL=2
+                    DEBUG_LOG "Backup will be pushed to github"
+                    ;;
+                --force)
+                    force="--force"
+                    DEBUG_LOG "Forcing push"
+                    ;;
+                -h|--help|help)
+                    Usage
+                    return 0
+                    ;;
+                *)
+                    ERROR "Invalid flag: $arg"
+                    ;;
+            esac
+        fi
+    done
+
+    SourceConfig "${CONFIG_FILE}"
+
+    ValidatePaths "FILES_TO_COPY" || return 1
+    ValidateDirPaths "DIRS_TO_COPY" || return 1
+
+    if [[ "${should_clone}" -eq 1 ]]; then
+        CloneRepo "${clone_dir}"
+        return 0
+    fi
+
+    if command -v rsync 1> /dev/null 2>&1; then
+        SYNC_="rsync"
+        [[ $? -ne 0 ]] && ERROR "'rsync' not found. Falling back to 'cp'."
+    elif command -v cp 1> /dev/null 2>&1; then
+        SYNC_="cp"
+    fi
+
+    # Why local dotfile directory doesn't exist
+    if [[ ! -d "${GIT_DIR}" ]]; then
+        INFO "$(ColorPath ${GIT_DIR}) doesn't exist"
+        mkdir --parents "${GIT_DIR}" && {
+            INFO "Created $(ColorPath ${GIT_DIR})"
+        } || {
+            ERROR "Cannot create '${BLUE}${GIT_DIR}${NC}'"
+            return 1
+        }
+    fi
+
+    DEBUG_LOG "Using GIT_DIR=$(ColorPath ${GIT_DIR})"
+    DEBUG_LOG "Using git_status=$git_status"
+    DEBUG_LOG "Using LOG_LEVEL=$LOG_LEVEL"
+    DEBUG_LOG "Using SYNC_=$SYNC_"
+
+    # Start copying all the files to the destination
+    for pair in "${FILES_TO_COPY[@]}"; do
+        IFS=$'|' read -r src dest <<< "${pair}"
+        CopyFiles "$src" "$dest"
+    done
+
+    # Start copying directory content with selective deletion
+    for dir_spec in "${DIRS_TO_COPY[@]}"; do
+        IFS=$'|' read -r src dest delete_flag <<< "${dir_spec}"
+        CopyDirs "${src}" "${dest}" "${delete_flag}"
+    done
+
+    if [[ ${git_status} -eq 1 ]]; then
+        cd ${GIT_DIR}
+        git status &> /dev/null || ERROR "Not a git repository"
+    fi
+
+    echo && INFO "Dotfile directory: ${BLUE}$(ColorPath ${GIT_DIR})${NC}\n"
+
+    if [[ $should_push -eq 1 ]]; then
+        PushToRepo "${force}" || return 1
+    else
+        return 0
+    fi
+}
+
+main "$@"
+
