@@ -57,6 +57,7 @@ alias lll="eza --long --color=always --icons=always --group --numeric --long --h
 alias ls="lsd --color=always --git --icon=always --group-dirs=first --classify 2> /dev/null"
 alias ll="lsd --long --color=always --git --icon=always --group-dirs=first --classify --permission octal --total-size 2> /dev/null"
 alias la="lsd --color=always --git --all --icon=always --group-dirs=first --classify --permission octal --total-size 2> /dev/null"
+alias mv="mv --verbose"
 alias diff="diff --color=auto"
 alias cp="LOG error '${RED}Use rsync MF${NC}'; return 1 &> /dev/null"
 alias grep="grep --color=always"
@@ -85,7 +86,7 @@ alias n="nvim"
 alias v="vim"
 alias colorchoser="exec env QT_QPA_PLATFORMTHEME=qt6ct kcolorchooser 2> /dev/null &; disown ; exit"
 alias getcolors="exec env QT_QPA_PLATFORMTHEME=qt6ct kcolorchooser 2> /dev/null &; disown"
-alias mpv="mpv --vid=auto --vo=gpu-next --hwdec=vulkan --hdr-compute-peak --volume=65"
+alias mpv="mpv --vid=auto --vo=gpu-next --hwdec=vulkan --hdr-compute-peak --volume=64"
 alias Vireon="cd ${HOME}/DEV/VIreon && ssh-add ${HOME}/.ssh/id_ed25519_rustlog"
 alias radeontop="radeontop --color"
 alias exiftool="/usr/bin/vendor_perl/exiftool"
@@ -93,6 +94,7 @@ alias metadata="/usr/bin/vendor_perl/exiftool"
 alias lsblk="lsblk --paths -o+SIZE --fs"
 alias Cat="/usr/bin/bat --theme-dark=TwoDark --color=always --paging=always --decorations=never"
 
+### Random aliasing
 alias сдуфк="clear"
 alias ды="ls"
 
@@ -113,6 +115,7 @@ alias fp-calculator="flatpak run io.github.Qalculate.qalculate-qt"
 alias fp-qcal="flatpak run io.github.Qalculate.qalculate-qt"
 alias fp-systemmonitor="XDG_CURRENT_DESKTOP=KDE GTK_THEME=Adwaita:dark QT_QPA_PLATFORMTHEME=gtk plasma-systemmonitor"
 
+### Determine package manager
 function PackageManager() {
     local -a pkg_m_Arr=()
     pkg_m_Arr=(pacman apt yum dnf yay)
@@ -127,6 +130,7 @@ function PackageManager() {
 }; alias pkg="PackageManager"; alias my_pkg_m="PackageManager"
 alias my_package_manager="PackageManager"; alias my-package-manager="PackageManager"
 
+### Just check basic utilities in system
 function RequiredTools() {
     ## Get PackageManager
     [[ -z $1 ]] && LOG info "Most basic tools"
@@ -140,7 +144,7 @@ function RequiredTools() {
         # Version control
         git
         # Networking
-        curl rsync nmcli traceroute wget ssh traceroute dig
+        curl rsync nmcli wget ssh traceroute dig
         # Compression
         gzip bzip2 xz zip
         # Container
@@ -218,33 +222,33 @@ function rot13() {
     [[ -n $ZSH_VERSION ]] && emulate -LR bash
     local -a ARGS=("$@")
     local argc=${#ARGS[@]}
-        local operation=
-        local save_path=
-        local input=
-        local arg=
-        local next_arg=
+    local operation=
+    local save_path=
+    local input=
+    local arg=
+    local next_arg=
 
-        if [[ $# -lt 1 ]]; then
-            LOG error "At least one arguments expected"
-            LOG info "rot13 <encode/decode> <file/string>"
-            return 1
-        fi
+    if [[ $# -lt 1 ]]; then
+        LOG error "At least one arguments expected"
+        LOG info "rot13 <encode/decode> <file/string>"
+        return 1
+    fi
 
-        for (( i=0 ; i < argc; i++ )); do
-            arg="${ARGS[$i]}"
-            case "${arg}" in
-                -s|-save|--save)
-                    save_path="${ARGS[$(($i+1))]}"
-                    i=$((i+1))
-                    [[ -z "${save_path}" || ! -f "${save_path}" ]] && {
-                        LOG error "Not a valid path: '${save_path}'"
-                    }
-                ;;
-            -s=*|-save=*|--save=*)
-                save_path="${arg#*=}"
+    for (( i=0 ; i < argc; i++ )); do
+        arg="${ARGS[$i]}"
+        case "${arg}" in
+            -s|-save|--save)
+                save_path="${ARGS[$(($i+1))]}"
+                i=$((i+1))
                 [[ -z "${save_path}" || ! -f "${save_path}" ]] && {
                     LOG error "Not a valid path: '${save_path}'"
                 }
+            ;;
+        -s=*|-save=*|--save=*)
+            save_path="${arg#*=}"
+            [[ -z "${save_path}" || ! -f "${save_path}" ]] && {
+                LOG error "Not a valid path: '${save_path}'"
+            }
             ;;
         -e|-encode|--encode|encode|enc)
             operation="encode"
@@ -259,91 +263,27 @@ function rot13() {
                 }
             fi
             ;;
-    esac
-done
-
-[[ -z "${input}" ]] && {
-    LOG error "Input '${input}' is empty"
-    return 1
-}
-
-[[ -n "${save_path}" ]] && {
-    printf "%s: " "Create this file? (y)es|(n)o"
-    read -r YES
-    [[ "${YES}" =~ ^(Yes|yes|y)$ ]] && touch "${save_path}"
-}
-
-if [[ ! -f "${input}" ]]; then
-    # RotTransform encode|decode InputType Input FilePath
-    RotTransform "${operation}" "text" "${input}" "${save_path}"
-else
-    # RotTransform encode|decode InputType Input FilePath
-    RotTransform "${operation:-"encode"}" "file" "${input}" "${save_path}"
-fi
-}
-
-### C boilerplate code
-function C_boilerplate() {
-    local FILE="$1"
-    cat > "${FILE}" << EOF
-# include <stdio.h>
-
-# define EXIT_SUCCESS 0
-# define EXIT_FAILURE 1
-
-int main(void) {
-    printf("\n");
-    return EXIT_SUCCESS;
-}
-
-EOF
-}
-
-### C++ boilerplate code
-function Cpp_boilerplate() {
-    local FILE="$1"
-    cat > "${FILE}" << EOF
-# include <iostream>
-
-# define EXIT_SUCCESS 0
-# define EXIT_FAILURE 1
-
-int main(void) {
-    std::cout << std::endl;
-    return EXIT_SUCCESS;
-}
-
-EOF
-}
-
-### Logical vi with C/C++ boilerplate
-function vi() {
-    local args=("$@")
-    if [[ "${#args[@]}" -eq 0 ]]; then
-        /usr/bin/vim
-    fi
-    for element in "${args[@]}" ; do
-        if  [[ "${element}" != -* ]] ; then
-            case "${element##*.}" in
-                cpp|cxx|cc|c++)
-                    [[ ! -s "${element}" ]] && Cpp_boilerplate "${element}"
-                    /usr/bin/nvim "${element}"
-                    ;;
-                c)
-                    [[ ! -s "${element}" ]] && C_boilerplate "${element}"
-                    /usr/bin/nvim "${element}"
-                    ;;
-                py)
-                    /usr/bin/nvim "${element}"
-                    ;;
-                *)
-                    /usr/bin/vim "${element}"
-                    ;;
-            esac
-        else
-            /usr/bin/vim "${args[@]}"
-        fi
+        esac
     done
+
+    [[ -z "${input}" ]] && {
+        LOG error "Input '${input}' is empty"
+        return 1
+    }
+
+    [[ -n "${save_path}" ]] && {
+        printf "%s: " "Create this file? (y)es|(n)o"
+        read -r YES
+        [[ "${YES}" =~ ^(Yes|yes|y)$ ]] && touch "${save_path}"
+    }
+
+    if [[ ! -f "${input}" ]]; then
+        # RotTransform encode|decode InputType Input FilePath
+        RotTransform "${operation}" "text" "${input}" "${save_path}"
+    else
+        # RotTransform encode|decode InputType Input FilePath
+        RotTransform "${operation:-"encode"}" "file" "${input}" "${save_path}"
+    fi
 }
 
 ### Fetch defined https_proxy and https_proxy variable to current shell environment
@@ -380,7 +320,7 @@ function Extract() {
     esac
 }
 
-### Mount the remote
+### Mount a remote to local mount point
 function RcloneMount() {
     [[ -n $ZSH_VERSION ]] && emulate -LR bash
     RequiredTools 0
@@ -512,6 +452,7 @@ function _compileExitHandler() {
     fi
 }
 
+### GUI develeopment (Debuging enabled)
 function GUI_BUILD_DEBUG() {
     local FILE="$(realpath $1)"
     local NO_EXT_FILENAME="${FILE%.*}"
@@ -523,6 +464,7 @@ function GUI_BUILD_DEBUG() {
     _compileExitHandler $? "${NO_EXT_FILENAME}" "$@"
 }
 
+### GUI develeopment (release mode)
 function GUI_BUILD_RELEASE() {
     local FILE="$(realpath $1)"
     local NO_EXT_FILENAME="${FILE%.*}"
@@ -689,10 +631,11 @@ function sway_vulkan() {
         }
 }
 
-function SetPath() {
+### Set the path with default locations
+function setPath() {
     PATH+=: PATH+="/usr/local/bin:/usr/local/sbin:/usr/sbin:/sbin:/bin"
-    PATH+=: PATH+="${HOME}/.bin:${HOME}/.local/bin:"
-    PATH+=: PATH+="${HOME}/.cargo/bin:${HOME}/.npm-global/bin:${BREW}/bin"
+    PATH+=: PATH+="${HOME}/.bin:${HOME}/.local/bin"
+    PATH+=: PATH+="${HOME}/.cargo/bin:${HOME}/.npm_global/bin:${BREW}/bin"
 
     local tmp_path="/tmp/.home.path"
     if [[ ! -s "${tmp_path}" ]] ;then
@@ -702,6 +645,16 @@ function SetPath() {
         export PATH
     fi
 }
+
+### Show all the paths in $PATH
+function Paths() {
+    [[ -n $ZSH_VERSION ]] && emulate -LR bash
+    local IFS=$':' i=0
+    for path in $PATH; do
+        printf '%-2s %-2s %s\n' "${i}" '->' "${path}"
+        ((i++))
+    done
+}; alias show_path="Paths"; alias print_path="Paths"
 
 ### Start SSH agent on initial login
 function SSHAgent() {
@@ -717,18 +670,18 @@ function SSHAgent() {
 ### Update my Arch Linux
 function Update() {
     if command -v paru &> /dev/null; then
-        paru --verbose --noconfirm -Syyu
+        paru --verbose --noconfirm -Syu
     elif command -v yay &> /dev/null; then
-        yay --verbose --noconfirm -Syyu
+        yay --verbose --noconfirm -Syu
     else
-        sudo pacman --verbose --noconfirm -Syyu
+        sudo pacman --verbose --noconfirm -Syu
     fi
 
-    if command -v brew &> /dev/null; then
-        brew update -v
+    if [[ $? -eq 0 ]] && command -v brew &> /dev/null; then
+        brew update -v && brew upgrade -v
     fi
 
-    if command -v flatpak &> /dev/null; then
+    if [[ $? -eq 0 ]] && command -v flatpak &> /dev/null; then
         flatpak update -y
     fi
 }
@@ -737,6 +690,48 @@ function Update() {
 function RandomColors() {
     local format="$1"
     pastel random | pastel format "${format:-"hex"}"
+}
+
+### Set refresh rate to 144Hz
+function 144hz() {
+    local output="" mode=""
+    local px="" hz=""
+    local -i req_hz=144
+
+    if [[ ${XDG_SESSION_TYPE} == wayland ]]; then
+        output="$(wlr-randr | head -n1 | cut -d' ' -f1)"
+        px=$(wlr-randr | grep --color=never current | awk -F' ' '{ print $1 }')
+        hz=$(wlr-randr | grep --color=never -P "(?=.*${px})(?=.*${req_hz})" | grep --color=never -o -E "${req_hz}\.[0-9]+")
+        mode="${px}px@${hz}Hz"
+        wlr-randr --output ${output} --mode ${mode} && exit 0 || LOG error "Cannot set $req_hz"
+    elif [[ ${XDG_SESSION_TYPE} == x11 ]]; then
+        output=$(xrandr | grep --color=never 'connected primary' | cut -d' ' -f1)
+        px=$(xrandr | grep --color=never '\*' | awk -F' ' '{ print $1 }')
+        hz=$(xrandr | grep --color=never "${px}" | grep --color=never -Eo "${req_hz}\.[0-9]+")
+        LOG info "xrandr --output ${output} --mode ${px} --rate ${hz}"
+        xrandr --output "${output}" --mode "${px}" --rate "${hz}" || LOG error "Cannot set $req_hz"
+    fi
+}
+
+### Set refresh rate to 60Hz
+function 60hz() {
+    local output="" mode=""
+    local px="" hz=""
+    local -i req_hz=60
+
+    if [[ ${XDG_SESSION_TYPE} == wayland ]]; then
+        output="$(wlr-randr | head -n1 | cut -d' ' -f1)"
+        px=$(wlr-randr | grep --color=never current | awk -F' ' '{ print $1 }')
+        hz=$(wlr-randr | grep --color=never -P "(?=.*${px})(?=.*${req_hz})" | grep --color=never -Eo "${req_hz}\.[0-9]+")
+        mode="${px}px@${hz}Hz"
+        wlr-randr --output ${output} --mode ${mode} && exit 0
+    elif [[ ${XDG_SESSION_TYPE} == x11 ]]; then
+        output=$(xrandr | grep --color=never 'connected primary' | cut -d' ' -f1)
+        px=$(xrandr | grep --color=never '\*' | awk -F' ' '{ print $1 }')
+        hz=$(xrandr | grep --color=never "${px}" | grep --color=never -Eo "${req_hz}\.[0-9]+")
+        LOG info "xrandr --output ${output} --mode ${px} --rate ${hz}"
+        xrandr --output "${output}" --mode "${px}" --rate "${hz}" || LOG error "Cannot set $req_hz"
+    fi
 }
 
 ### AI in terminal
@@ -757,12 +752,12 @@ function gpt() {
                 LOG info "Your imge: $(ColorPath "${img_path}")"
             ;;
         *)
-            AI_PROVIDER=pollinations tgpt --multiline --log "${session_log/TYPE/pollinations}"
+            AI_PROVIDER=isou tgpt --multiline --log "${session_log/TYPE/pollinations}"
             ;;
     esac
 }; alias devgpt='gpt dev'; alias gptimg='gpt img'
 
-### Cat bat
+### Pretty cat with colors
 function catbat() {
     local -a args=("$@")
     local -a batargs=()
@@ -777,6 +772,14 @@ function catbat() {
         esac
     done
     /usr/bin/bat --theme-dark=TwoDark --color=always --decorations=never --paging=never "${batargs[@]}"
+}
+
+### Temporay writing
+function temp() {
+    local TEMP_FILE="$(mktemp -t TEMP_WRITE_DUMP.XXXX)"
+    "${EDITOR}" "${TEMP_FILE}";
+    cat "${TEMP_FILE}"
+    rm "${TEMP_FILE}"
 }
 
 ### Spanish lessons
@@ -887,10 +890,67 @@ function Pretty_rename() {
     done
 }
 
+### Set CPU frequencies to certain limits
+function SetPower() {
+    local profile="$1"
+    local -i stapm fast slow apuslow
+
+    case "${profile}" in
+        verylow|very-low)
+            stapm=5000 fast=5000 slow=5000 apuslow=5000
+            ;;
+        low)
+            stapm=10000 fast=10000 slow=8000 apuslow=8000
+            ;;
+        vibe|coding)
+            stapm=15000 fast=15000 slow=12000 apuslow=12000
+            ;;
+        balanced)
+            stapm=25000 fast=25000 slow=20000 apuslow=20000
+            ;;
+        high)
+            stapm=45000 fast=45000 slow=35000 apuslow=35000
+            ;;
+        boost)
+            stapm=65000 fast=65000 slow=54000 apuslow=54000
+            ;;
+        stock|default)
+            LOG info "Your default stock values"
+            stapm=65000 fast=65000 slow=54000 apuslow=54000
+            sudo ryzenadj \
+                --stapm-limit=$stapm \
+                --fast-limit=$fast \
+                --slow-limit=$slow \
+                --apu-slow-limit=$apuslow \
+                --stapm-time=1000 \
+                --slow-time=5000 \
+                --vrm-current=58000 \
+                --vrmsoc-current=15000 \
+                --vrmmax-current=110000 \
+                --vrmsocmax-current=20000 \
+                --tctl-temp=100000 \
+                --apu-skin-temp=42000 \
+                --dgpu-skin-temp=51000 2> /dev/null
+            return 0
+            ;;
+
+        info)
+            sudo ryzenadj --info 2> /dev/null
+            return 0
+            ;;
+        *)
+            LOG info "Usage: SetPower [verylow|low|balanced|high|boost|stock]"
+            return 1
+            ;;
+    esac
+    # Single call with dynamic values
+    sudo ryzenadj --stapm-limit=$stapm --fast-limit=$fast --slow-limit=$slow --apu-slow-limit=$apuslow 2> /dev/null
+}
+
 ### Download any video
 function Yt-dlp_download() {
     local url="$@"
-    yt-dlp -f "bestvideo[height<=1080]+bestaudio/audio[height<=1080]" "${url[@]}"
+    yt-dlp -f "bestvideo[height<=1080][ext=webm]/bestvideo[height<=1080]+bestaudio" "${url[@]}"
 }
 
 ### Get Ip and location info for current Network
@@ -923,7 +983,4 @@ function man() {
     local args=($@)
     /usr/bin/man ${args[@]} | /usr/bin/bat --decorations=never --color=always --language=markdown 2> /dev/null
 }
-
-SetPath
-SSHAgent
 

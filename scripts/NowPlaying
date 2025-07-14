@@ -30,6 +30,14 @@ function CheckPlay() {
             artist="$(playerctl --player="${player}" metadata artist)"
             album="$(playerctl --player="${player}" metadata album)"
 
+            if [[ "${player}" == "spotify" ]]; then
+                if [[ "${title}" == "Advertisement" ]]; then
+                    pactl set-sink-mute $(pactl get-default-sink) true
+                else
+                    pactl set-sink-mute $(pactl get-default-sink) false
+                fi
+            fi
+
             [[ "${player}" == "mpv" ]] && title="${title%.*}"
 
             if [[ -n "${artist}" ]]; then
@@ -48,7 +56,7 @@ function CheckPlay() {
                 -e 's/\n/\\n/g' \
                 -e 's/\f/\\f/g')"
 
-            echo "You are playing: ${combined}"
+            # echo "You are playing: ${combined}"
             echo "{\"text\": \"${combined}\", \"class\": \"active\"}" | socat - UNIX-CONNECT:"${MPV_SOCKET}"
             isPlaying=1
             break
@@ -61,7 +69,7 @@ function CheckPlay() {
 while true; do
     CheckPlay
     [[ $isPlaying -eq 0 ]] && {
-        echo "You are not playing anything"
+        # echo "You are not playing anything"
         echo '{"text": "", "class": "inactive"}' | socat - UNIX-CONNECT:"${MPV_SOCKET}"
     }
     sleep 0.3

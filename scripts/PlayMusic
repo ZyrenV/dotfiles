@@ -17,14 +17,14 @@ declare -a  mpv_flags=()
 declare -a SELECTED=() CURRENTLY_PLAYING=()
 
 MUSIC_DIR="${HOME}/Music"
-QUIET=""
+QUIET=0
 MPV_PID=0
 
 readonly MPV_SOCKET_DIR="/tmp/mpv_playing"
 readonly SOCKET="mpv_socket-$RANDOM"
 readonly MPV_SOCKET="${MPV_SOCKET_DIR}/$SOCKET"
 readonly MPV_LOG="${MPV_SOCKET_DIR}/mpv_log.log"
-readonly MUSIC_DIRECTORY="$( sed "s|/home/$(getent passwd | grep $UID | cut -d: -f1)|${BLUE//\\/\\\\}\${HOME}${NC//\\/\\\\}|g" <(echo ${HOME}/Music) )"
+readonly MUSIC_DIRECTORY="$( sed "s@${HOME}@${BLUE//\\/\\\\}\${HOME}${NC//\\/\\\\}@g" <(printf '%s\n' ${HOME}/Music) )"
 
 # function cleanup() {
 #     echo '{"text": "", "class": "inactive"}"' | socat - UNIX-CONNECT:${MPV_SOCKET}
@@ -38,26 +38,27 @@ function LOG() {
     shift
     case "${type_}" in
         info)
-            [[ -z "${QUIET}" ]] && { printf "[%b*%b]: " "${GREEN}" "${NC}"; printf "%b""$*\n"; }
+            [[ "${QUIET}" -eq 0 ]] && { printf "[%b*%b]: " "${GREEN}" "${NC}"; printf "%b""$*\n"; }
             ;;
         command_)
-            [[ -z "${QUIET}" ]] && { printf "[%b*%b]: " "${GREEN}" "${NC}"; printf "%b " "$@\b\n"; }
+            [[ "${QUIET}" -eq 0 ]] && { printf "[%b*%b]: " "${GREEN}" "${NC}"; printf "%b " "$@\b\n"; }
             ;;
         warn)
-            echo -e "[${WARN}^${NC}]: $@"
+            printf '[%b%s%b]' "${WARN}" "^" "${NC}" "$*"
             ;;
         error)
-            echo -e "[${RED}!${NC}]: $@"
+            printf '[%b%s%b]' "${RED}" "!" "${NC}" "$*"
             ;;
     esac
 }
 
 function Exit() {
-    [[ -n $LOGGER_PID ]] && kill $LOGGER_PID 2> /dev/null
-    rm -f "${MPV_SOCKET}" "$MPV_LOG"
-    rmdir ${MPV_SOCKET_DIR} &> /dev/null
-    printf "\nExiting...\n"
-    exit $1
+    if [[ $1 =~ ^[0-9]+$ || -z $1 ]]; then
+        exit ${1:-0}
+    else
+        printf "%s\n\n" "$1"
+        exit ${2:-0}
+    fi
 }
 
 function CheckDependencies() {
@@ -76,7 +77,7 @@ function CheckDependencies() {
             echo -e "  - ${RED}${dep}${NC}"
         done
         echo -e "${WARN}Please install the missing dependencies and try again.${NC}"
-        Exit 1
+        Exit "Exiting..." 1
     fi
 }
 
@@ -105,87 +106,6 @@ function Usage() {
         ""
 }
 
-function IPC_() {
-    local data="$1"
-    shift
-    local -a args=("$@") arr=()
-
-    for (( i=0; i < ${#args[@]}; i++ )); do
-        arr+=("${args[$i]}")
-        if (( i < ${#args[@]} - 1 )); then
-            arr+=(', ')
-        fi
-    done
-    if [[ -S "${MPV_SOCKET}" ]] && pgrep -x mpv | grep -q -o $MPV_PID; then
-        echo "{ \"command\": [ ${arr[@]} ] }" | ncat -U "${MPV_SOCKET}" | jq -r ".$data" 2> /dev/null
-    else
-        Exit 1
-    fi
-}
-
-function BackgroundStatusLogger() {
-    local title= pos= dur= prev_title= prev_pos=
-    printf "\n"
-    while pgrep -x mpv | grep -q -o $MPV_PID; do
-        if [[ -S "${MPV_SOCKET}" ]]; then
-            title=$(IPC_ 'data' '"get_property"' '"media-title"') &> /dev/null
-            pos=$(IPC_ 'data' '"get_property"' '"time-pos"' | awk '{printf "%d:%02d", int($1/60), int($1%60)}') &> /dev/null
-            dur=$(IPC_ 'data' '"get_property"' '"duration"' | awk '{printf "%d:%02d", int($1/60), int($1%60)}') &> /dev/null
-        fi
-        [[ "$title" != "$prev_title" || "$pos" != "$prev_pos" ]] && {
-            printf "\r\033[2K[${BLUE}*${NC}]: Playing: '${GREEN}%s${NC}' | %s / %s" "${title}" "$pos" "$dur"
-            prev_title="$title"
-            prev_pos=$pos
-        }
-        sleep 0.5
-    done
-}
-
-function Quit() {
-    while IFS= read -r KEY; do
-        if [[ $KEY =~ ^(q|Q)$ ]]; then
-            Exit 0
-        fi
-    done
-}
-
-function HandleIpcControl() {
-    local togglePlay="false"
-    while pgrep -x mpv | grep -q -o $MPV_PID; do
-        IFS= read -rsn1 KEY
-        case "${KEY}" in
-            [qQ]) IPC_ 'error' '"quit"' &> /dev/null ; Exit 0 ;;
-            s) IPC_ 'error' '"cycle"' '"shuffle"' &> /dev/null ;;
-            r) IPC_ 'error' '"cycle"' '"loop-playlist"' &> /dev/null ;;
-            f) IPC_ 'error' '"cycle"' '"fullscreen"' &> /dev/null ;;
-            l) IPC_ 'error' '"seek"' 5 &> /dev/null ;;
-            j) IPC_ 'error' '"seek"' -5 &> /dev/null ;;
-            L) IPC_ 'error' '"seek"' 20 &> /dev/null ;;
-            J) IPC_ 'error' '"seek"' -20 &> /dev/null ;;
-            +|0) IPC_ 'error' '"add"' '"volume"' 5 &> /dev/null ;;
-            -|9) IPC_ 'error' '"add"' '"volume"' -5 &> /dev/null ;;
-            n|N|'>') IPC_ 'error' '"playlist-next"' &> /dev/null ;;
-            p|P|'<') IPC_ 'error' '"playlist-prev"' &> /dev/null ;;
-            $'\x20'|k)
-                [[ $togglePlay == false ]] && togglePlay=true || togglePlay=false
-                IPC_ 'error' '"set_property"' '"pause"' $togglePlay &> /dev/null
-                ;;
-            $'') # Enter key
-                LOG info "Enter"
-                ;;
-            $'\x1b')
-                while IFS= read -rsn1 -t 0.0006 key; do
-                    KEY+="$key"
-                done
-                [[ ${KEY} == $'\x1b[A' ]] && IPC_ 'error' '"add"' '"volume"' 5 &> /dev/null
-                [[ ${KEY} == $'\x1b[B' ]] && IPC_ 'error' '"add"' '"volume"' -5 &> /dev/null
-                [[ ${KEY} == $'\x1b[C' ]] && IPC_ 'error' '"seek"' 5 &> /dev/null
-                [[ ${KEY} == $'\x1b[D' ]] && IPC_ 'error' '"seek"' -5 &> /dev/null
-                ;;
-        esac
-    done
-}
-
 function TurnMusicOn() {
     local -a files_joined=("$@")
     local -a quoted_files=()
@@ -194,13 +114,10 @@ function TurnMusicOn() {
 
     mkdir -p "${MPV_SOCKET_DIR}"
 
-
     if [[ $mpv_ -eq 1 ]]; then
-        for f in "${files_joined[@]}"; do
-            CURRENTLY_PLAYING="$(basename "${MUSIC_DIRECTORY}/${f}")"
-            mpv ${mpv_flags[@]} "${files_joined[@]/#/${MUSIC_DIR}/}"
-        done
-    elif [[ $loop -eq 1 ]]; then
+        CURRENTLY_PLAYING="$(basename "${MUSIC_DIRECTORY}/${f}")"
+        mpv ${mpv_flags[@]} "${files_joined[@]/#/${MUSIC_DIR}/}"
+    else
         LOG info "${BLUE}Tracks${NC}:"
         for (( i=0; i < ${#files_joined[@]}; i++)); do
             track_num=$((i+1))
@@ -209,24 +126,10 @@ function TurnMusicOn() {
             CURRENTLY_PLAYING+=("$(basename "${MUSIC_DIRECTORY}/${file}")")
             LOG info "  ${GREY}$track_num${NC} ${LIGHT_SKIN}${CURRENTLY_PLAYING[$i]%.*}${NC}"
         done
-
-        printf "\n"
+        printf '\n'
         LOG command_ "${GREY}COMMAND${NC}: ${BROWN}mpv${NC}" "${mpv_flags[@]}" "${quoted_files[@]}"
-        mpv "${mpv_flags[@]}" "${files_joined[@]/#/${MUSIC_DIR}/}" &> "${MPV_SOCKET_DIR}/mpv_log.log" & disown
-        MPV_PID=$!
-        if [[ $? -eq 0 ]]; then
-            BackgroundStatusLogger &
-            LOGGER_PID=$!
-            HandleIpcControl
-        fi
-    else
-        for f in "${files_joined[@]}"; do
-            CURRENTLY_PLAYING="$(basename "${MUSIC_DIRECTORY}/${f}")"
-            LOG info "${GREY}MUSIC${NC}: ${GREEN}${CURRENTLY_PLAYING%.*}${NC}"
-            LOG command_ "${GREY}COMMAND${NC}: ${BROWN}mpv${NC} ${mpv_flags[@]} '${LIGHT_SKIN}${MUSIC_DIRECTORY}/${f}${NC}'\n"
-            # echo "{\"text\": \"🎵 ${CURRENTLY_PLAYING%.*}\", \"class\":\"active\"}" | socat - UNIX-CONNECT:${MPV_SOCKET}
-            mpv ${mpv_flags[@]} "${MUSIC_DIR}/${f}"
-        done
+        mpv "${mpv_flags[@]}" "${files_joined[@]/#/${MUSIC_DIR}/}"
+        printf '\n'
     fi
 }
 
@@ -276,7 +179,7 @@ function main() {
                 fi
                 ;;
             -q|--quiet)
-                QUIET="--really-quiet"
+                QUIET=1
                 ;;
             -m|--mpv|mpv)
                 mpv_=1
@@ -310,7 +213,7 @@ function main() {
 
     mpv_flags+=(
         "--vid=${video:-"no"}"
-        "--volume=${volume:-65}"
+        "--volume=${volume:-64}"
     )
 
     mpv_flags+=(
@@ -322,7 +225,6 @@ function main() {
         mpv_flags+=(
             "--vo=tct"
             "--vid=auto"
-            "--image-display-duration=inf"
             "--really-quiet"
         )
     else
@@ -334,21 +236,15 @@ function main() {
         "--hwdec=vulkan"
         "--hdr-compute-peak"
         "--loop-playlist=inf"
+        "--quiet"
         "--msg-level=ffmpeg/demuxer=error"
     )
 
-    if [[ $loop -eq 1 && $mpv_ -eq 0 ]]; then
-        mpv_flags+=(
-            "--input-ipc-server=${MPV_SOCKET}"
-        )
-    fi
-
-    [[ -n "${QUIET}" ]] && mpv_flags+=("${QUIET}")
+    [[ "${QUIET}" -eq 1 ]] && mpv_flags+=("--really-quiet")
 
     ### Play music
     Play
 }
 
 main "$@"
-Exit 0
 

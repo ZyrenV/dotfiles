@@ -360,7 +360,7 @@ function main() {
                     LOG_LEVEL=1
                     DEBUG_LOG "Verbose is set"
                     ;;
-                -l=*|--log=*|log=*|--loglevel=*|loglevel=*)
+                -l=*|--log=*|log=*|--loglevel=*|--log-level=*|loglevel=*)
                     LOG_LEVEL=${arg#*=}
                     if [[ -z ${LOG_LEVEL} || ${LOG_LEVEL} == -* ]] || [[ ! ${LOG_LEVEL} =~ ^[0-9]+$ ]]; then
                         LOG_LEVEL=1
@@ -369,7 +369,7 @@ function main() {
                     fi
                     [[ $LOG_LEVEL -ge 3 ]] && DEBUG_LOG "Debugging enabled"
                     ;;
-                -l|--log|log|--loglevel|loglevel)
+                -l|--log|log|--loglevel|--log-level|loglevel)
                     LOG_LEVEL=${flagArr[$(( i + 1 ))]:-1}
 
                     if [[ -z ${LOG_LEVEL} || ${LOG_LEVEL} == -* ]]; then
@@ -384,7 +384,7 @@ function main() {
                     LOG_LEVEL=2
                     DEBUG_LOG "Debugging enabled"
                     ;;
-                -g|-gs|--gs|--status|--git-status|g)
+                -g|-gs|--gs|--status|--git-status|--gitstatus|g)
                     git_status=1
                     DEBUG_LOG "git_status is set"
                     ;;

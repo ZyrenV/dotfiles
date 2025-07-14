@@ -1,10 +1,15 @@
 " Plugin Manager (vim-plug)
 call plug#begin('/usr/share/vim/VIM')
+    " Comment stuff
     Plug 'tpope/vim-commentary'
+    " Autocompletion
     Plug 'neoclide/coc.nvim', {'branch': 'release'}
+    " Nerdtree file finder
     Plug 'preservim/nerdtree'
+    " Bottom bar
     Plug 'vim-airline/vim-airline'
-    Plug 'tomasr/molokai'  " Use molokai color scheme (like in Neovim)
+    " Molokai Theme
+    Plug 'tomasr/molokai'
 call plug#end()
 
 " Color scheme
@@ -13,8 +18,9 @@ colorscheme sorbet
 " Enable syntax highlighting
 syntax enable
 
-" Line numbering
+" Line numbers relative to current cursor position
 set relativenumber
+" numbers on left side
 set number
 
 " Tab and indentation settings
@@ -37,9 +43,21 @@ filetype plugin indent on
 " Automatically jump to last cursor position when reopening a file
 autocmd BufReadPost * if line("'\"") > 0 && line("'\"") <= line("$") | exe "normal! g`\" | zz" | endif
 
-" Custom commands for compiling and running C/C++ code
-command! RunCpp w | !gcc -x c++ -pedantic -std=c++20 -lstdc++ -fno-elide-constructors -Wall -Wextra -O0 "%" -o "%:r" && ./"%:r" ; rm ./"%:r"
-command! RunC w | !gcc -pedantic -Wall -Wextra -O0 "%" -o "%:r" && ./"%:r" ; rm ./"%:r"
+" C tmeplate
+autocmd BufNewFile *.c call setline(1, ["# include <stdio.h>", "", "# define EXIT_SUCCESS 0", "# define EXIT_FAILURE 1", "", "int main(void) {", "    printf(\"\\n\");", "    return EXIT_SUCCESS;", "}", ""])
+" C++ tmeplate
+autocmd BufNewFile *.cpp,*.cxx,*.cc,*.c++ call setline(1, ["# include <iostream>", "", "# define EXIT_SUCCESS 0", "# define EXIT_FAILURE 1", "", "int main(void) {", "    std::cout << '\\n';", "    return EXIT_SUCCESS;", "}", ""])
+" Python tmeplate
+autocmd BufNewFile *.py call setline(1, ["#!/usr/bin/env python3", "", "def main():", "    print()", "","if __name__ == '__main__':", "    main()", ""])
+" Bash tmeplate
+autocmd BufNewFile *.sh call setline(1, ["#!/usr/bin/env bash", "", "set -euo pipefail", "", "function main() {", "    echo HELLO", "}", "", "main \"$@\"", ""])
+" auto chmod logic
+autocmd BufWritePost *.sh,*.py if getline(1) =~ '^#!' | silent !chmod +x '%' | endif
+
+" Run C++
+command! RunCpp w | execute '!gcc -x c++ -pedantic -std=c++20 -lstdc++ -fno-elide-constructors -Wall -Wextra -O0 ' . shellescape(expand('%:p')) . ' -o ' . shellescape(expand('%:p:r')) . ' && ' . shellescape(expand('%:p:r')) . ' ; rm ' . shellescape(expand('%:p:r'))
+" Run C
+command! RunC w | execute '!gcc -pedantic -Wall -Wextra -O0 ' . shellescape(expand('%:p')) . ' -o ' . shellescape(expand('%:p:r')) . ' && ' . shellescape(expand('%:p:r')) . ' ; rm ' . shellescape(expand('%:p:r'))
 
 " Custom keybindings
 nnoremap <silent><A-j> :move .+1 <CR>==
@@ -72,6 +90,7 @@ command! ToggleWrap :call ToggleWrap()
 
 " Install vim-plug (plugin manager)
 command! InstallPlug call InstallPlug()
+
 
 function! InstallPlug()
     call system("curl -fLo ~/.vim/autoload/plug.vim --create-dirs https://raw.githubusercontent.com/junegunn/vim-plug/master/plug.vim")
