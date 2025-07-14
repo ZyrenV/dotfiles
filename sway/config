@@ -90,11 +90,9 @@ font pango: SourceCodePro Large 4
 ### Auto Start ###
     exec --no-startup-id /usr/lib/polkit-kde-authentication-agent-1
     # Start's waybar
-        exec --no-startup-id ${HOME}/.config/sway/theme.sh
+    exec --no-startup-id ${HOME}/.config/sway/theme.sh
     exec --no-startup-id autotiling
     exec --no-startup-id ${HOME}/.scripts/something
-    exec --no-startup-id  bash -c \
-        '$( (swaymsg exec flatpak run com.github.wwmm.easyeffects) ; sleep 5 ; swaymsg "[app_id="com.github.wwmm.easyeffects"] move scratchpad" )'
 
     exec_always --no-startup-id bash -c 'sock="${XDG_RUNTIME_DIR}/foot${WAYLAND_DISPLAY/#/-}.sock"; [[ -S "${sock}" ]] || foot --server=${sock}'
     exec_always --no-startup-id ${HOME}/.bin/NowPlaying
@@ -269,6 +267,7 @@ font pango: SourceCodePro Large 4
         # Bring my Text-fu terminal
             bindsym $mod+Return exec footclient
             bindsym $mod+Shift+Return exec alacritty
+            bindsym $mod+Alt+Return exec kitty
 
         # Good File Managers
             bindsym Alt+E exec XDG_CURRENT_DESKTOP=kde GTK_THEME=Adwaita:dark QT_QPA_PLATFORMTHEME=qt6 dolphin
@@ -353,7 +352,8 @@ font pango: SourceCodePro Large 4
 
     #* Scripts *#
         # An application launcher
-            bindsym F10 exec pkill -x waybar && pkill -SIGUSR1 -f .config/sway/theme.sh
+            bindsym F10 exec bash -c 'FILE="${HOME}/.config/sway/theme.sh"; pgrep -f "${FILE}" || "${FILE}"; pkill -x waybar; pkill -SIGUSR1 -f ${FILE}'
+            bindsym $mod+F10 exec killall waybar
 
         # An application launcher
             bindsym $mod+D exec ${HOME}/.config/waybar/scripts/application_launcher

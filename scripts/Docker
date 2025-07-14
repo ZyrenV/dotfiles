@@ -106,7 +106,7 @@ for (( i=0 ; i < ${#ARGS[@]}; i++ )); do
         --start)
             StartDocker || LOG info "Docker services are already stopped"
             ;;
-        --ls|--list|--avail|--available)
+        -l|--ls|--list|--avail|--available)
             IFS=$'\n'
             printf '%b%-24s%b          %b%s%b\n' "\033[38;2;101;191;213m" "Availale Containers" "\033[0m" "\033[38;2;114;186;36m" "Ports" "\033[0m"
             printf '%-24s =>       %s\n' $(docker ps --format json --all | jq -r '{Name: .Names}, {Ports: .Ports}' | jq '.[]')

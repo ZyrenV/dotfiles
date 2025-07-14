@@ -24,7 +24,7 @@ function main() {
     done
 
     set_background
-    sleep 0.4 && swaymsg 'output * power off'
+    sleep 0.04 && swaymsg 'output * power off'
 }
 
 main "$@"

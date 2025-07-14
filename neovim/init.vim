@@ -62,10 +62,22 @@ set shada='1000,f0,h
 autocmd BufReadPost * if line("'\"") > 0 && line("'\"") <= line("$") | exe "normal! g`\" | zz" | endif
 autocmd BufRead,BufNewFile *.conf set filetype=dosini
 
+" C tmeplate
+autocmd BufNewFile *.c call setline(1, ["# include <stdio.h>", "", "# define EXIT_SUCCESS 0", "# define EXIT_FAILURE 1", "", "int main(void) {", "    printf(\"\\n\");", "    return EXIT_SUCCESS;", "}", ""])
+" C++ tmeplate
+autocmd BufNewFile *.cpp,*.cxx,*.cc,*.c++ call setline(1, ["# include <iostream>", "", "# define EXIT_SUCCESS 0", "# define EXIT_FAILURE 1", "", "int main(void) {", "    std::cout << '\\n';", "    return EXIT_SUCCESS;", "}", ""])
+" Python tmeplate
+autocmd BufNewFile *.py call setline(1, ["#!/usr/bin/env python3", "", "def main():", "    print()", "","if __name__ == '__main__':", "    main()", ""])
+" Bash tmeplate
+autocmd BufNewFile *.sh call setline(1, ["#!/usr/bin/env bash", "", "set -euo pipefail", "", "function main() {", "    echo HELLO", "}", "", "main \"$@\"", ""])
+" auto chmod logic
+autocmd BufWritePost *.sh,*.py if getline(1) =~ '^#!' | silent !chmod +x '%' | endif
 
-" Custom commands for compiling and running C/C++ code
-command! RunCpp w | !gcc -x c++ -pedantic -std=c++20 -lstdc++ -fno-elide-constructors -Wall -Wextra -O0 "%" -o "%:r" && ./"%:r" ; rm ."/%:r"
-command! RunC w | !gcc -pedantic -Wall -Wextra -O0 "%" -o "%:r" && ./"%:r" ; rm ./"%:r"
+" Run C++
+command! RunCpp w | execute '!gcc -x c++ -pedantic -std=c++20 -lstdc++ -fno-elide-constructors -Wall -Wextra -O0 ' . shellescape(expand('%:p')) . ' -o ' . shellescape(expand('%:p:r')) . ' && ' . shellescape(expand('%:p:r')) . ' ; rm ' . shellescape(expand('%:p:r'))
+" Run C
+command! RunC w | execute '!gcc -pedantic -Wall -Wextra -O0 ' . shellescape(expand('%:p')) . ' -o ' . shellescape(expand('%:p:r')) . ' && ' . shellescape(expand('%:p:r')) . ' ; rm ' . shellescape(expand('%:p:r'))
+
 
 " Install vim-plug (plugin manager)
 command! InstallPlug call InstallPlug()
@@ -109,7 +121,8 @@ command! ToggleWrap :call ToggleWrap()
 
 " Confirm Coc completion (when pop-up menu is visible) in insert mode
 inoremap <silent><expr> <CR> pumvisible() ? coc#_select_confirm()
-                              \: "\<C-g>u\<CR>\<c-r>=coc#on_enter()\<CR>"
+                          \: "\<C-g>u\<CR>\<c-r>=coc#on_enter()\<CR>"
+
 let g:vimspector_enable_mappings = 'HUMAN'
 
 function! InstallPlug()

@@ -152,23 +152,18 @@ bar {
 }
 
 # Set transparency levels for specific applications (optional)
-for_window [class="waterfox"] opacity 1
-# for_window {
-#     [app_id=".*"] opacity 0.9898
-#     [class=".*"] border pixel 1
-#     [class=".*"] default_floating_border pixel 1
-#     [app_id="foot"] opacity 0.98
-#     [app_id="waterfox|kitty"] opacity 1
-#     [app_id="^waterfox$|^com.rtosta.zapzap$|^org.pulseaudio.pavucontrol$|^pavucontrol$|^com.github.wwmm.easyeffects"] floating enable
-#     [app_id="^org.kde.dolphin$|^org.kde.plasma-systemmonitor$|^blueman-manager$|^org.kde.konsole"] floating enable
-#     [app_id="^org.kde.okular$|^org.qutebrowser.qutebrowser$|^org.kde.kclock$"] floating enable
-#     [class="^Brave-browser$|^ZapZap$|^discord$"] floating enable
-# }
-
+for_window [class=".*"] border pixel 1
+for_window [class="^(waterfox|com.rtosta.zapzap|org.pulseaudio.pavucontrol|pavucontrol|easyeffects)$"] floating enable
+for_window [class="^(dolphin|org.kde.plasma-systemmonitor|blueman-manager|Blueman-manager|konsole)$"] floating enable
+for_window [class="^(okular|qutebrowser|kclock)$"] floating enable
+for_window [class="^(Brave-browser|ZapZap|discord)$"] floating enable
 # <outer-border-color> <frame-color> <title-text-color> <next-tiling-indicator-color>
 client.focused #333333 #6600AA #DDDDDD #6600AA
 client.unfocused #333333 #666666 #DDDDDD #666666
 
+title_align center
+# default_border none
+# hide_edge_borders
 
 # Policykit agent
 exec --no-startup-id '/usr/lib/polkit-kde-authentication-agent-1'
