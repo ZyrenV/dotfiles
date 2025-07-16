@@ -154,7 +154,7 @@ function RequiredTools() {
         # Build tools
         make cmake gcc clang
         # Scripting languages
-        python ruby node npm php
+        python ruby node npm
         # Productivity
         htop btop tmux figlet cowsay tree jq fzf bat lsd eza rg unzip zip
         # Compilers
@@ -855,25 +855,25 @@ function grammer_check() {
     '
 }
 
-### Terminal file explorer
+### Terminal file explorer with cd tracking
 function y() {
     local tmp="$(mktemp -t "yazi-cwd.XXXXXX")" cwd=
-    yazi "$@" --cwd-file="$tmp"
-    if cwd="$(command cat -- "$tmp")" && [ -n "$cwd" ] && [ "$cwd" != "$PWD" ]; then
-        builtin cd -- "$cwd"
+    yazi "$@" --cwd-file="${tmp}"
+    if cwd="$(command cat -- "${tmp}")" && [[ -n "${cwd}" && "${cwd}" != "${PWD}" ]]; then
+        builtin cd -- "${cwd}"
     fi
-    rm -f -- "$tmp"
+    rm -f -- "${tmp}"
 }
 
 ### Terminal file explorer with cd tracking
 function yc() {
     clear
     local tmp="$(mktemp -t "yazi-cwd.XXXXXX")" cwd=
-    yazi "$@" --cwd-file="$tmp"
-    if cwd="$(command cat -- "$tmp")" && [ -n "$cwd" ] && [ "$cwd" != "$PWD" ]; then
-        builtin cd -- "$cwd"
+    yazi "$@" --cwd-file="${tmp}"
+    if cwd="$(command cat -- "${tmp}")" && [[ -n "${cwd}" && "${cwd}" != "${PWD}" ]]; then
+        builtin cd -- "${cwd}"
     fi
-    rm -f -- "$tmp"
+    rm -f -- "${tmp}"
 }
 
 ### Remove Unnecessary characters from given string

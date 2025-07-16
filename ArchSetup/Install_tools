@@ -131,6 +131,11 @@ function Install_utils() {
     AUR_install "${MSG}" nbfc-linux nbfc-gtk
 }
 
+function Install_Metadata_Shielding() {
+    MSG="Metadata shielding"
+    Pacman_install "${MSG}" dnscrypt-proxy torsocks
+}
+
 function Install_term_filemanagers() {
     MSG="Terminal File managers"
     Pacman_install "${MSG}" yazi ranger nautilus dolphin
@@ -258,6 +263,7 @@ function main() {
                 Install_monitors
                 Install_utils
                 Install_term_filemanagers
+                Install_Metadata_Shielding
                 Install_pentesting_tools
                 Install_crypto_fun
                 Install_sway_setup
