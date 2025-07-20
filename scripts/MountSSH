@@ -538,7 +538,7 @@ function EditConfig() {
                 printf '%s' "Make changes? (y|n): "
                 read -r yes_no
                 if [[ "${yes_no}" =~ ^(yes|Yes|y)$ ]]; then
-                    echo && LOG info "Your changes:" && echo
+                    echo && echo
                     for i in {1..60}; do printf '%s' "#"; done; printf '\n'
                     Cat "${temp_edit}" $col
                     for i in {1..60}; do printf '%s' "#"; done; printf '\n'

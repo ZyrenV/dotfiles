@@ -2,6 +2,16 @@
 
 config.load_autoconfig(False)
 
+### Custom keybindings
+config.bind('<', 'back')
+config.bind('>', 'forward')
+config.bind('<Ctrl+Shift+H>', 'tab-move +1')
+config.bind('<Ctrl+Shift+L>', 'tab-move -1')
+config.bind('<Shift+E>', 'edit-url')
+
+# Edit the url with vim
+c.editor.command = ["foot", "vim", "{file}"]
+
 # content blocking
 c.content.blocking.enabled = True
 
@@ -9,11 +19,10 @@ c.content.blocking.enabled = True
 c.url.start_pages = "about:blank"
 c.url.default_page = "about:blank"
 
-# c.tabs.show = "multiple"
-
 c.tabs.title.format = "{audio}{current_title}"
 c.fonts.web.size.default = 20
 
+## Define search engines
 c.url.searchengines = {
         'DEFAULT': 'https://duckduckgo.com/?q={}',
         '!g': 'https://www.google.com/search?q={}',
@@ -24,12 +33,10 @@ c.url.searchengines = {
         '!yt': 'https://www.youtube.com/results?search_query={}',
 }
 
+# save tabs on quit/restart
+c.auto_save.session = True
+
 c.completion.open_categories = ['searchengines', 'quickmarks', 'bookmarks', 'history', 'filesystem']
-
-
-c.editor.command = ["foot", "vim", "{file}"]
-
-c.auto_save.session = True # save tabs on quit/restart
 
 # keybinding changes
 # config.bind('=', 'cmd-set-text -s :open')
@@ -47,9 +54,6 @@ c.auto_save.session = True # save tabs on quit/restart
 # config.bind('gJ', 'tab-move +')
 # config.bind('gK', 'tab-move -')
 # config.bind('gm', 'tab-move')
-
-config.bind('<', 'back')
-config.bind('>', 'forward')
 
 # dark mode setup
 c.colors.webpage.darkmode.enabled = True

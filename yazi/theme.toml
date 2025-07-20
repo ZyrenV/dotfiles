@@ -9,7 +9,7 @@ rules = [
 	{ mime = "image/*", fg = "#A0DD0A" },
 
 	# Media
-	{ mime = "{audio,video}/*", fg = "#AA66FF" },
+	{ mime = "{audio,video}/*", fg = "#B5A6FF" },
 
 	# Archives
 	{ mime = "application/{zip,rar,7z*,tar,gzip,xz,zstd,bzip*,lzma,compress,archive,cpio,arj,xar,ms-cab*}", fg = "red" },
@@ -30,6 +30,6 @@ rules = [
 
 	# Fallback (for Directories)
 	# { name = "*", fg = "white" },
-	{ name = "*/", fg = "#88AAFF" }
+	{ name = "*/", fg = "#8877FF" }
 ]
 

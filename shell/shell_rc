@@ -42,7 +42,7 @@ fi
 export HOSTNAME="$(cat /etc/hostname)"
 export LANG=en_US.UTF-8
 export WINEPREFIX="${HOME}/wine"
-export HISTFILE="/tmp/histfile"
+export HISTFILE="/tmp/histfile_${USER}"
 export EDITOR="nvim"
 export BREW="/home/linuxbrew/.linuxbrew"
 export PATH="/usr/bin"
@@ -91,6 +91,7 @@ alias Vireon="cd ${HOME}/DEV/VIreon && ssh-add ${HOME}/.ssh/id_ed25519_rustlog"
 alias radeontop="radeontop --color"
 alias exiftool="/usr/bin/vendor_perl/exiftool"
 alias metadata="/usr/bin/vendor_perl/exiftool"
+alias qutebrowser="QT_QPA_PLATFORM=xcb QT_WEBENGINE_DISABLE_GPU=1 qutebrowser "$@""
 alias lsblk="lsblk --paths -o+SIZE --fs"
 alias Cat="/usr/bin/bat --theme-dark=TwoDark --color=always --paging=always --decorations=never"
 
@@ -667,25 +668,6 @@ function SSHAgent() {
     fi
 }
 
-### Update my Arch Linux
-function Update() {
-    if command -v paru &> /dev/null; then
-        paru --verbose --noconfirm -Syu
-    elif command -v yay &> /dev/null; then
-        yay --verbose --noconfirm -Syu
-    else
-        sudo pacman --verbose --noconfirm -Syu
-    fi
-
-    if [[ $? -eq 0 ]] && command -v brew &> /dev/null; then
-        brew update -v && brew upgrade -v
-    fi
-
-    if [[ $? -eq 0 ]] && command -v flatpak &> /dev/null; then
-        flatpak update -y
-    fi
-}
-
 ### Get randomcolors quickly
 function RandomColors() {
     local format="$1"
@@ -775,7 +757,7 @@ function catbat() {
 }
 
 ### Temporay writing
-function temp() {
+function t() {
     local TEMP_FILE="$(mktemp -t TEMP_WRITE_DUMP.XXXX)"
     "${EDITOR}" "${TEMP_FILE}";
     cat "${TEMP_FILE}"
@@ -947,6 +929,40 @@ function SetPower() {
     sudo ryzenadj --stapm-limit=$stapm --fast-limit=$fast --slow-limit=$slow --apu-slow-limit=$apuslow 2> /dev/null
 }
 
+function Browser() {
+    [[ -n $ZSH_VERSION ]] && emulate -LR bash
+    local profile_dir="${HOME}/.profiles"
+    local browser_name="$1"
+    local requested_profile="$2"
+    local -i should_return=1
+    local profile browser
+
+    local -a supported_browsers=( firefox waterfox librewolf )
+
+    for browser in "${supported_browsers[@]}"; do
+        if [[ "${browser_name}" == "${browser}" ]]; then
+            should_return=0
+        fi
+    done
+
+    if [[ $should_return -eq 1 ]]; then
+        LOG error "Unsupported browser '${browser_name}'"
+        return 1
+    fi
+    for profile in ${profile_dir}/*; do
+        profile=$(basename "${profile}")
+        if [[ "${requested_profile}" == "${profile}" ]]; then
+            matched_profile="${profile_dir}/${profile}"
+        fi
+    done
+    if [[ -n ${matched_profile} ]]; then
+        $browser_name --profile "${matched_profile}" 2> /dev/null
+    else
+        LOG error "No profiles matched"
+    fi
+
+}; alias browser="Browser" alias Waterfox="browser waterfox"
+
 ### Download any video
 function Yt-dlp_download() {
     local url="$@"
@@ -983,4 +999,3 @@ function man() {
     local args=($@)
     /usr/bin/man ${args[@]} | /usr/bin/bat --decorations=never --color=always --language=markdown 2> /dev/null
 }
-

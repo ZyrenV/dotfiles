@@ -100,7 +100,9 @@ function Install_graphics_tools() {
     local -a PacmanPkgs=(
         nvidia nvidia-utils nvidia-prime amd-ucode
         vulkan-devel vulkan-tools vulkan-icd-loader lib32-vulkan-icd-loader
-        xf86-video-amdgpu lib32-vulkan-radeon xdg-desktop-portal xdg-desktop-portal-wlr
+        xf86-video-amdgpu lib32-vulkan-radeon
+        # xdg-desktop-portal-X X=wlr for sway, X=hyprland for hyprland
+        xdg-desktop-portal xdg-desktop-portal-wlr
         pastel
     )
     Pacman_install "${MSG}" "${PacmanPkgs[@]}"
@@ -226,7 +228,7 @@ function Install_misc_tools() {
         syncplay ncurses carla qtractor rust rust-src ardour qt6-tools obsidian
         nvidia-container-toolkit weechat irssi blender okular krita vim git
         docker gimp wofi code python-openai-whisper perl-image-exiftool xev
-        shfmt binwalk
+        shfmt binwalk niri
     )
 
     local -a AurPkgs=(

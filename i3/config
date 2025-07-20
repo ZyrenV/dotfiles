@@ -20,7 +20,7 @@ exec --no-startup-id nm-applet
 exec --no-startup-id autotiling
 
 # My configs
-exec --no-startup-id feh --bg-scale ~/.config/i3/wallpapers/main.wallpaper
+exec_always --no-startup-id feh --bg-scale ~/.config/i3/wallpapers/main.wallpaper
 
 exec --no-startup-id xinput set-prop 11 'libinput Accel Profile Enabled' 0, 1
 exec --no-startup-id xinput set-prop 11 'libinput Scroll Method Enabled' 0, 1
@@ -61,7 +61,7 @@ floating_modifier Mod4
 set $menu rofi -show-icons -show drun -modi
 
 # Start a terminal
-bindsym $mod+Return exec bash -c "(alacritty || kitty) || ghostty"
+bindsym $mod+Return exec bash -c "(kitty || alacritty) || ghostty"
 bindsym Ctrl+Mod1+t exec $term
 bindsym Mod1+t exec $term
 
