@@ -10,24 +10,24 @@ font pango: SourceCodePro Large 4
     }
 
 ### Output devices (Display) ###
-    set $OUTPUT         *
-    set $OUTPUT_DP      eDP-1
-    set $OUTPUT_HDMI    HDMI-A-1
+    set $output         *
+    set $output_DP      eDP-1
+    set $output_HDMI    HDMI-A-1
 
-    set $OUTPUT $OUTPUT_DP
+    set $output $output
 
-    # workspace $OUTPUT output $OUTPUT
-    output $OUTPUT  background imgs/dark_1.jpg fill
-    output $OUTPUT  mode 1920x1080@144Hz
-    output $OUTPUT  scale 1
-    output $OUTPUT  transform normal
-    output $OUTPUT  scale_filter smart
-    output $OUTPUT  max_render_time off
-    output $OUTPUT  render_bit_depth 8
-    output $OUTPUT  subpixel rgb
-    output $OUTPUT  adaptive_sync on
-    output $OUTPUT  allow_tearing yes
-    output $OUTPUT  color_profile icc /usr/share/color/icc/colord/sRGB.icc
+    # workspace $output output $output
+    output $output  background imgs/dark_1.jpg fill
+    output $output  mode 1920x1080@144Hz
+    output $output  scale 1
+    output $output  transform normal
+    output $output  scale_filter smart
+    output $output  max_render_time off
+    output $output  render_bit_depth 8
+    output $output  subpixel rgb
+    output $output  adaptive_sync on
+    output $output  allow_tearing yes
+    output $output  color_profile icc /usr/share/color/icc/colord/sRGB.icc
 
 ### Enable Xwayland ##
     xwayland enabled
@@ -91,8 +91,14 @@ font pango: SourceCodePro Large 4
     exec --no-startup-id /usr/lib/polkit-kde-authentication-agent-1
     # Start's waybar
     exec --no-startup-id ${HOME}/.config/sway/theme.sh
+
     exec --no-startup-id autotiling
     exec --no-startup-id ${HOME}/.scripts/something
+
+    # XDG desktop fixes
+    exec --no-startup-id dbus-update-activation-environment --systemd WAYLAND_DISPLAY XDG_CURRENT_DESKTOP=sway XDG_SESSION_TYPE=wayland
+    exec --no-startup-id /usr/lib/xdg-desktop-portal-wlr &
+    exec --no-startup-id /usr/lib/xdg-desktop-portal -r
 
     exec_always --no-startup-id bash -c 'sock="${XDG_RUNTIME_DIR}/foot${WAYLAND_DISPLAY/#/-}.sock"; [[ -S "${sock}" ]] || foot --server=${sock}'
     exec_always --no-startup-id ${HOME}/.bin/NowPlaying
@@ -103,21 +109,21 @@ font pango: SourceCodePro Large 4
 
 ### Window rules ###
     # Set opacity for all windows
-        for_window [app_id=".*"] opacity 0.98
+        for_window [app_id=".*"] opacity 0.99
     # Border of newly spawned window
         for_window [class=".*"] border pixel 1
     # Border of floating window
         for_window [class=".*"] default_floating_border pixel 1
     # Transparancy levels for applications
-        for_window [app_id="foot"] opacity 0.97
-        for_window [app_id="waterfox|kitty"] opacity 1
-    # Any App Id with 'Pop-Up', make it float it
-        for_window [app_id="Pop-Up"] floating enable, move position center
+        for_window [app_id="^(foot)$"] opacity 0.97
+        for_window [app_id="^(waterfox|kitty)$"] opacity 1
+    # Any App Id with 'Floating', floating
+        for_window [app_id="^(Floating|Float|floating|float)$"] floating enable, move position center
     # Enabele floating don't tile
-        for_window [app_id="^waterfox$|^com.rtosta.zapzap$|^org.pulseaudio.pavucontrol$|^pavucontrol$|^com.github.wwmm.easyeffects"] floating enable
-        for_window [app_id="^org.kde.dolphin$|^org.kde.plasma-systemmonitor$|^blueman-manager$|^org.kde.konsole"] floating enable
-        for_window [app_id="^org.kde.okular$|^org.qutebrowser.qutebrowser$|^org.kde.kclock$"] floating enable
-        for_window [class="^Brave-browser$|^ZapZap$|^discord$"] floating enable
+        for_window [app_id="^(waterfox|com.rtosta.zapzap|org.pulseaudio.pavucontrol|pavucontrol|com.github.wwmm.easyeffects)$"] floating enable
+        for_window [app_id="^(org.kde.dolphin|org.kde.plasma-systemmonitor|blueman-manager|org.kde.konsole)$"] floating enable
+        for_window [app_id="^(org.kde.okular|org.qutebrowser.qutebrowser|org.kde.kclock$)$"] floating enable
+        for_window [class="^(Brave-browser|ZapZap|discord|qutebrowser)$"] floating enable
 
     # <outer-border-color> <frame-color> <title-text-color> <next-tiling-indicator-color>
         client.focused #333333 #6600AA #DDDDDD #6600AA
@@ -263,15 +269,15 @@ font pango: SourceCodePro Large 4
 
     #* Executable Binaries *#
         # Keyboard centric browser
-            bindsym $mod+F1 exec qutebrowser
+            bindsym $mod+F1 exec env QT_QPA_PLATFORM=xcb QT_WEBENGINE_DISABLE_GPU=1 qutebrowser
         # Bring my Text-fu terminal
             bindsym $mod+Return exec footclient
             bindsym $mod+Shift+Return exec alacritty
             bindsym $mod+Alt+Return exec kitty
 
         # Good File Managers
-            bindsym Alt+E exec XDG_CURRENT_DESKTOP=kde GTK_THEME=Adwaita:dark QT_QPA_PLATFORMTHEME=qt6 dolphin
-            bindsym $mod+E exec XDG_CURRENT_DESKTOP=kde nautilus
+            bindsym Alt+E exec env XDG_CURRENT_DESKTOP=kde GTK_THEME=Adwaita:dark QT_QPA_PLATFORMTHEME=qt6 dolphin
+            bindsym $mod+E exec env XDG_CURRENT_DESKTOP=kde nautilus
         # Lauch wofi, my friend who fetches all the applications for me
             bindsym Alt+Space exec $menu_wofi
             bindsym Alt+Shift+Space exec $menu_rofi
@@ -306,13 +312,13 @@ font pango: SourceCodePro Large 4
 
         # Shutdown (Mod+Alt+Shift+P)
             bindsym $mod+Alt+Shift+P exec bash -c \
-                '$(notify-send "Shutting down... because I need a nap" ; sleep 2 ; swaymsg exit; systemctl poweroff --now)'
+                '$(notify-send "Shutting down... because I need a nap"; sleep 2; systemctl poweroff --now)'
         # Reboot/Restart ($mod+Alt+Shift+R)
             bindsym $mod+Alt+Shift+R exec bash -c \
-                '$(notify-send "REBOOTING... Sometimes you need to restart!" ; sleep 2 ; swaymsg exit; systemctl reboot --now)'
+                '$(notify-send "REBOOTING... Sometimes you need to restart!"; sleep 2; systemctl reboot --now)'
         # Sleep (Mod+Alt+Shift+delete)
             bindsym $mod+Alt+Shift+delete exec bash -c \
-                '$(notify-send "I need some Rest"; sleep 2 ; swaymsg exit; systemctl suspend --now)'
+                '$(notify-send "I need some Rest"; sleep 2; systemctl suspend --now)'
 
         # Shutdown  ($mod+Alt+P)
             bindsym $mod+Alt+P exec bash -c \
@@ -339,13 +345,13 @@ font pango: SourceCodePro Large 4
     #* System monitors *#
         # htop
         bindsym Ctrl+Shift+Escape exec bash -c \
-            '$(  foot -e htop ||  foot -e btop )'
+            '$( foot -e htop ||  foot -e btop )'
         # btop
         bindsym Ctrl+Escape exec bash -c \
             '$( foot -e btop || foot -e htop )'
         # Plasma system monitor
         bindsym $mod+Escape exec bash -c \
-            '$( XDG_CURRENT_DESKTOP=KDE GTK_THEME=Adwaita:dark plasma-systemmonitor || ( foot -e htop || sudo pacman -Sy htop --noconfirm))'
+            '$( env XDG_CURRENT_DESKTOP=KDE GTK_THEME=Adwaita:dark plasma-systemmonitor || ( foot -e htop || sudo pacman -Sy htop --noconfirm))'
 
     #* Toggle keyboard layout *#
         bindsym $mod+Alt+space input type:keyboard xkb_switch_layout next
@@ -368,7 +374,7 @@ font pango: SourceCodePro Large 4
 
         # Journal time: Let's document the mess
             bindsym $mod+grave+J exec bash -c \
-                '$(foot -e ${HOME}/.bin/JournalToday nvim)'
+                '$(foot -e ${HOME}/.bin/JournalToday "nvim")'
 
 
 ### Additional configuration

@@ -1,0 +1,304 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+# Colors
+HL="\033[1m"
+NC="\033[0m"
+MSG_COL="\033[38;2;255;240;200m"
+RED="\033[38;2;196;29;31m"
+BLUE="\033[38;2;116;112;218m"
+WARN_COL="\033[38;2;203;82;96m"
+
+function LOG() {
+    local type_="$1"
+    shift
+    case "${type_}" in
+        info)
+            printf "%b\n" "$*"
+            ;;
+        error)
+            printf "[%b%s%b]: %b\n" "${RED}"      "ERR"  "${NC}" "$*"
+            ;;
+        warn)
+            printf "[%b%s%b]: %b\n" "${WARN_COL}" "WARN" "${NC}" "$*"
+            ;;
+        fatal)
+            printf "[%b%s%b]: %b\n" "${RED}"      "FATAL" "${NC}" "$*"
+            exit 1
+            ;;
+    esac
+}
+
+# Usage message
+function Usage() {
+    printf '\n%b\n' "${HL}Usage${NC}: $(basename "$0") [boot] [options] <profile1> <profile2> ...\n"
+    printf "  ${MSG_COL}%-18b${NC} %s\n" \
+        "boot"           "Boot from ISO + disk image" \
+        "<profile>"      "Profile name (defined in ~/.custom/Vm/profiles)" \
+        "-f, --fullscreen" "Enable fullscreen mode" \
+        "-edit"          "Edit the profiles config file" \
+        "-h, --help"     "Show this help message"
+    printf '%s\n' ""
+}
+
+function load_profile() {
+    local profile_name="$1"
+    local -n disk_img_=$2
+    local -n iso_img_=$3
+    local -n disk_format_=$4
+    local -n selected_profile=${profile_name}
+
+    if ! declare -p "${profile_name}" 2> /dev/null | grep -q 'declare -a' ; then
+        LOG fatal "Profile '${profile_name}' not found."
+    fi
+
+    disk_img_="${selected_profile[0]}"
+    iso_img_="${selected_profile[1]:="No_ISO"}"
+    disk_format_="${disk_img_##*.}"
+}
+
+function EditConfigFile() {
+    local file="$1"
+    ${EDITOR:-vim} "${file}"
+}
+
+function ColorPath() {
+    echo "$( sed "s@${HOME}@${BLUE//\\/\\\\}\${HOME}${NC//\\/\\\\}@g" <(printf "%s\n" "${1}") )"
+}
+
+function ListProfiles() {
+    local config_file="$1"
+    local -a available_profiles=""
+    [[ -f "${config_file}" ]] || return 1
+    LOG info "Available profiles:"
+    mapfile -t available_profiles < <(grep -o '^[A-Za-z_]*=(' "${config_file}" | sed 's/=(//')
+    for (( i=0; i < ${#available_profiles[@]}; i++ )); do
+        printf '   %s. %b\n' "$((i+1))" "${available_profiles[$i]}"
+    done
+}
+
+function WriteDefaultProfile() {
+    local file="$1"
+    local img="${HOME}/qemu_vm/your_image.raw"
+    local iso="${HOME}/qemu_vm/your_iso.iso"
+    cat >> "${file}" << EOF
+#!/usr/bin/env bash
+
+# Replace 'your_profile_name' with a name based on your use case
+your_profile_name=(
+    # Path to disk image (replace with the actual path)
+    "${img}"
+
+    # Path to ISO file (replace with the actual path)
+    "${iso}"
+)
+
+# vim:filetype=bash
+
+EOF
+}
+
+function print_row() {
+    local label="$1"
+    local value="$2"
+    printf "  %b%-16b%b: %b\n" "$MSG_COL" "$label" "$NC" "$value"
+}
+
+# Boot VM with ISO
+function boot_VM() {
+    local img="$1"
+    local iso="$2"
+    local format="$3"
+    local -i ram=$4
+    local -i full_scr=$5
+    local profile_in_use="$6"
+    local ram_display=""
+
+
+    local -a qemu_flags_arr=(
+        "-m" "${ram}"
+        "-cpu" "EPYC-v4"
+        "-vga" "qxl"
+        "-display" "gtk,gl=on,show-menubar=off,zoom-to-fit=on"
+        "-boot" "d"
+        "-enable-kvm"
+        "-drive" "file="${disk_img// /\\}",media=disk,format="${format}",if=virtio"
+        "-drive" "file="${iso// /\\}",media=cdrom"
+    )
+
+    [[ $full_scr -eq 1 ]] && qemu_flags_arr+=( "-full-screen" )
+
+    if (( ram >= 1024 )); then
+        ram_display="$(awk -v mb="$ram" 'BEGIN { printf "%.2f GB", mb / 1024 }')"
+    else
+        ram_display="${ram} MB"
+    fi
+
+    printf "${HL}Booting VM: Disk + ISO${NC}\n"
+    print_row "Profile"         "${profile_in_use}"
+    print_row "Disk file"       "${BLUE}${img}${NC}"
+    print_row "ISO file"        "${BLUE}${iso}${NC}"
+    print_row "Disk format"     "${format}"
+    print_row "RAM Allocated"   "${ram_display}"
+
+    qemu-system-x86_64 "${qemu_flags_arr[@]}" & disown
+}
+
+# Start VM from disk
+function start_VM() {
+    local img="$1"
+    local format="$2"
+    local -i ram=$3
+    local -i full_scr=$4
+    local profile_in_use="$5"
+    local ram_display=""
+
+    local -a qemu_flags_arr=(
+        "-m" "${ram}"
+        "-cpu" "EPYC-v4"
+        "-vga" "qxl"
+        "-display" "gtk,gl=on,show-menubar=off"
+        "-enable-kvm"
+        "-audiodev" "pa,id=devpa"
+        "-drive" "file=${img// /\\},media=disk,format=${format},if=virtio"
+    )
+
+    [[ $full_scr -eq 1 ]] && qemu_flags_arr+=( "-full-screen" )
+
+    if (( ram >= 1024 )); then
+        ram_display="$(awk -v mb="$ram" 'BEGIN { printf "%.2f GB", mb / 1024 }')"
+    else
+        ram_display="${ram} MB"
+    fi
+
+    printf "${HL}Starting VM: Disk only${NC}\n"
+    print_row "Profile"         "${profile_in_use}"
+    print_row "Disk file"       "${BLUE}${img}${NC}"
+    print_row "Disk format"     "${format}"
+    print_row "RAM Allocated"   "${ram_display}"
+
+    qemu-system-x86_64 "${qemu_flags_arr[@]}" & disown
+}
+
+function main() {
+    # Flags
+    local -a arg_array=("$@")
+
+    [[ ${#arg_array[@]} -eq 0 ]] && {
+        Usage
+        return 0
+    }
+
+    local disk_img="" iso_img="" disk_format=""
+    local -a requested_profiles=()
+    local config_file="${HOME}/.custom/Vm/profiles"
+
+    local -i boot=0 full_scr=0
+    local -i ram="$(( $(awk '/MemTotal/ { print $2 }' /proc/meminfo) / 1640 ))"
+
+    mkdir -p "${HOME}/.custom/Vm"
+
+    if [[ -s "${config_file}" && -f "${config_file}" ]]; then
+        source "${config_file}"
+
+        if grep -q "your_profile_name=" "${config_file}"; then
+        LOG warn "Please rename 'your_profile_name' in the profile to something meaningful."
+    fi
+
+    else
+        LOG warn "No profile found. Creating a default"
+        WriteDefaultProfile "${config_file}" && \
+            LOG info "New default profile created at '$(ColorPath "${config_file}")'"
+    fi
+
+    # Parse args
+    for (( i=0; i < ${#arg_array[@]}; i++ )); do
+        arg="${arg_array[$i]}"
+        case "${arg}" in
+            boot|-*boot)
+                boot=1
+                ;;
+            im*g*=*|-*im*g*=*)
+                disk_img="${arg#*=}"
+                ;;
+            iso*=*|-*iso*=*)
+                iso_img="${arg#*=}"
+                ;;
+            ram=*|-*ram=*)
+                ram="${arg#*=}"
+                ;;
+            im*g*|-*im*g*)
+                disk_img="${arg_array[$((i+1))]}"
+                ;;
+            iso|-*iso)
+                iso_img="${arg_array[$((i+1))]}"
+                ;;
+            ram|-*ram)
+                ram="${arg_array[$((i+1))]}"
+                ;;
+            f|-f|-*full*|*full*)
+                full_scr=1
+                ;;
+            -*l|list*|-*list*)
+                ListProfiles "${config_file}"
+                return 0
+                ;;
+            edit|-*edit)
+                EditConfigFile "${config_file}"
+                return 0
+                ;;
+            h|-h|-*help)
+                Usage
+                return 0
+                ;;
+            [A-Za-z_]*)
+                if declare -p "${arg}" 2> /dev/null | grep -q 'declare -a'; then
+                    requested_profiles+=("${arg}")
+                else
+                    LOG fatal "'${arg}' Not a valid profile"
+                fi
+                ;;
+            *)
+                LOG warn "Unknown argument: '${arg}'"
+                Usage
+                return 1
+                ;;
+        esac
+    done
+
+    if [[ ${#requested_profiles[@]} -eq 0 ]]; then
+        LOG fatal "No profile name was given"
+    fi
+
+    for req_profile in "${requested_profiles[@]}"; do
+
+        load_profile "${req_profile}" disk_img iso_img disk_format
+
+        # Path checks for disk image
+        if [[ -z "${disk_img}" ]]; then
+            LOG fatal "No disk image given"
+        elif [[ ! -s "${disk_img}" || ! -f "${disk_img}" ]]; then
+            LOG fatal "Disk image '${BLUE}${disk_img}${NC}' does not exist; Update it\n"
+        fi
+
+        if [[ $boot -eq 1 ]]; then
+            # Path checks for iso image
+            if [[ -z "${iso_img}" ]]; then
+                LOG fatal "No ISO image given"
+            elif [[ ! -s "${iso_img}" || ! -f "${iso_img}" ]]; then
+                LOG fatal "ISO '${BLUE}${iso_img}${NC}' does not exist"
+            fi
+        fi
+
+        # Entry logic
+        if [[ $boot -eq 1 ]]; then
+            boot_VM "${disk_img}" "${iso_img}" "${disk_format}" $ram $full_scr "${req_profile}"
+        else
+            start_VM "${disk_img}" "${disk_format}" $ram $full_scr "${req_profile}"
+        fi
+    done
+}
+
+main "$@"
+

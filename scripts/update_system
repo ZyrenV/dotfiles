@@ -1,0 +1,75 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+IFS=$'\n\t'
+
+LOG_FILE="/tmp/system_update.log"
+
+run_cmd() {
+    local cmd=("$@")
+    if ! "${cmd[@]}"; then
+        echo "Warning: Command failed -> ${cmd[@]}" &>> "${LOG_FILE}"
+        return 1
+    fi
+}
+
+update_aur() {
+    printf '\n%s\n\n' "================== AUR Update =================="
+    printf '\n%s\n\n' "================== AUR Update ==================" &>> "${LOG_FILE}"
+    if command -v paru &>/dev/null; then
+        if ! run_cmd paru --verbose --skipreview --noconfirm -Syyu; then
+            run_cmd paru --verbose --skipreview --noconfirm -Syu || \
+                run_cmd yay --noconfirm --answerdiff=None --answerclean=None -Syu
+        fi
+    elif command -v yay &>/dev/null; then
+        run_cmd yay --noconfirm --answerdiff=None --answerclean=None -Syyu || \
+            run_cmd yay --noconfirm --answerdiff=None --answerclean=None -Syu
+    else
+        run_cmd sudo pacman --verbose --noconfirm -Syyu || \
+            run_cmd sudo pacman --verbose --noconfirm -Syu
+    fi
+}
+
+update_brew() {
+    printf '\n\n\n%s\n\n' "================== Brew Update =================="
+    printf '\n\n\n%s\n\n' "================== Brew Update ==================" &>> "${LOG_FILE}"
+    if command -v brew &>/dev/null; then
+        run_cmd brew update -v
+        run_cmd brew upgrade -v || \
+            run_cmd brew upgrade -v
+    fi
+}
+
+update_flatpak() {
+    printf '\n\n\n%s\n\n' "================== Flatpak Update =================="
+    printf '\n\n\n%s\n\n' "================== Flatpak Update ==================" &>> "${LOG_FILE}"
+    if command -v flatpak &>/dev/null; then
+        run_cmd flatpak update -y || \
+            run_cmd flatpak update -y
+    fi
+}
+
+main() {
+    echo -e "Update: $(date)\n" > "${LOG_FILE}"
+    if update_aur; then
+        echo "INFO: AUR/package manager update finished." &>> "${LOG_FILE}"
+    else
+        echo "Warning: AUR/package manager update failed." &>> "${LOG_FILE}"
+    fi
+
+    if update_brew; then
+        echo "INFO: Brew update finished." &>> "${LOG_FILE}"
+    else
+        echo "Warning: Brew update failed." &>> "${LOG_FILE}"
+    fi
+
+    if update_flatpak; then
+        echo "INFO: Flatpak update finished." &>> "${LOG_FILE}"
+    else
+        echo "Warning: Flatpak update failed." &>> "${LOG_FILE}"
+    fi
+    echo >> "${LOG_FILE}"
+}
+
+main "$@"
+

@@ -14,7 +14,7 @@ function toggle_theme() {
         waybar -c ~/.config/sway/waybar/config.jsonc -s ~/.config/sway/waybar/dark.css &
         [[ $? -eq 0 ]] && echo "waybar on background"
     else
-        swaymsg output "*" background ~/.config/sway/imgs/light_0.jpg fill
+        swaymsg output "*" background ~/.config/sway/imgs/light_1.png fill
         waybar -c ~/.config/sway/waybar/config.jsonc -s ~/.config/sway/waybar/light.css &
         [[ $? -eq 0 ]] && echo "waybar on background"
     fi

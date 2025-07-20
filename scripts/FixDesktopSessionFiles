@@ -1,0 +1,179 @@
+#!/usr/bin/env bash
+
+### Run this script with sudo
+
+### Declutter your desktop session files
+
+
+if [[ $UID -ne 0  ]];then
+    printf '%s\n' "Always use sudo before running this script"
+    printf '%s\n' "Usage: sudo $(basename "$0")"
+    exit 0
+fi
+
+function RestoreBackup() {
+    local file="$1"
+    if [[ -f "${file}.bak" ]];then
+        cp "${file}.bak" "${file}"
+    fi
+}
+
+function Wayland_sway_desktop() {
+    local desktop_file="$1"
+    cat > "${desktop_file}" << EOF
+[Desktop Entry]
+Name=Sway (Wayland)
+Comment=An i3-compatible Wayland compositor
+Exec=env XDG_SESSION_TYPE=wayland XDG_CURRENT_DESKTOP=sway XDG_SESSION_DESKTOP=sway XDG_BACKEND=wayland QT_QPA_PLATFORM=wayland XDG_DESKTOP_PORTAL_BACKEND=wlr GDK_BACKEND=wayland WLR_RENDERER=vulkan sway --unsupported-gpu
+Type=Application
+Keywords=tiling;wayland;compositor;sway;
+
+EOF
+}
+
+function Wayland_hyprland_desktop() {
+    local desktop_file="$1"
+    cat > "${desktop_file}" << EOF
+[Desktop Entry]
+Name=Hyprland (Wayland)
+Comment=An intelligent dynamic tiling Wayland compositor
+DesktopNames=Hyprland
+Exec=env XDG_BACKEND=wayland QT_QPA_PLATFORM=wayland XDG_DESKTOP_PORTAL_BACKEND=wlr GDK_BACKEND=wayland WLR_RENDERER=vulkan Hyprland
+Type=Application
+Keywords=tiling;wayland;compositor;hyprland;
+
+EOF
+}
+
+function Wayland_plasma_desktop() {
+    local desktop_file="$1"
+    cat > "${desktop_file}" << EOF
+[Desktop Entry]
+Name=Plasma (Wayland)
+Comment=Plasma by KDE
+DesktopNames=KDE
+Exec=/usr/lib/plasma-dbus-run-session-if-needed /usr/bin/startplasma-wayland
+TryExec=/usr/bin/startplasma-wayland
+Keywords=plasma;kde;
+
+EOF
+}
+
+function Wayland_gnome_desktop() {
+    local desktop_file="$1"
+    cat > "${desktop_file}" << EOF
+[Desktop Entry]
+Name=GNOME (Wayland)
+Type=Application
+Comment=This session logs you into GNOME
+Exec=/usr/bin/gnome-session
+TryExec=/usr/bin/gnome-session
+DesktopNames=GNOME
+X-GDM-SessionRegisters=true
+X-GDM-CanRunHeadless=true
+
+EOF
+}
+
+function X11_i3_desktop() {
+    local desktop_file="$1"
+    cat > "${desktop_file}" << EOF
+[Desktop Entry]
+Name=i3 (X11)
+Type=Application
+Exec=i3
+TryExec=i3
+DesktopNames=i3
+Comment=improved dynamic tiling window manager (X11)
+X-LightDM-DesktopName=i3
+Keywords=tiling;wm;windowmanager;window;manager;
+
+EOF
+}
+
+function X11_gnome_desktop() {
+    local desktop_file="$1"
+    cat > "${desktop_file}" << EOF
+[Desktop Entry]
+Name=GNOME (X11)
+Type=Application
+Exec=/usr/bin/gnome-session
+TryExec=/usr/bin/gnome-session
+DesktopNames=GNOME
+Comment=This session logs you into GNOME (X11)
+X-GDM-SessionRegisters=true
+X-GDM-CanRunHeadless=true
+
+EOF
+}
+
+function X11_plasma_desktop() {
+    local desktop_file="$1"
+    cat > "${desktop_file}" << EOF
+[Desktop Entry]
+Name=Plasma (X11)
+Type=XSession
+Exec=/usr/bin/startplasma-x11
+TryExec=/usr/bin/startplasma-x11
+DesktopNames=KDE
+Comment=Plasma by KDE
+X-KDE-PluginInfo-Version=6.3.1
+
+EOF
+}
+
+function RestoreWaylandDesktopFiles() {
+    cd /usr/share/wayland-sessions; for file in *; do
+        case "${file}" in
+            *classic*|*uwsm*|gnome.*)
+                rm -f "${file}"
+            ;;
+        esac
+
+        case "${file}" in
+            sway.desktop)
+                Wayland_sway_desktop "${file}"
+                ;;
+            hyprland.desktop)
+                Wayland_hyprland_desktop "${file}"
+                ;;
+            plasma.desktop)
+                Wayland_plasma_desktop "${file}"
+                ;;
+            gnome-wayland.desktop)
+                Wayland_gnome_desktop "${file}"
+                ;;
+        esac
+    done
+}
+
+
+function RestoreX11DesktopFiles() {
+    cd /usr/share/xsessions; for file in *; do
+        case "${file}" in
+            *classic*|*gnome-*|*with*)
+                rm -f "${file}"
+            ;;
+        esac
+
+        case "${file}" in
+            i3.desktop)
+                X11_i3_desktop "${file}"
+                ;;
+            plasmax11.desktop)
+                X11_plasma_desktop "${file}"
+                ;;
+            gnome.desktop)
+                X11_gnome_desktop "${file}"
+                ;;
+        esac
+    done
+}
+
+function main() {
+    RestoreWaylandDesktopFiles
+    RestoreX11DesktopFiles
+}
+
+main "$@"
+
