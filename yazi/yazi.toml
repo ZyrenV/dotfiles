@@ -23,7 +23,7 @@ extract = [
     { run = 'ya pub extract --list "$@"',                   desc = "Extract here", for = "unix" },
 ]
 mpv_vlc = [
-    { run = 'mpv --loop --volume=65 "$@" || vlc "$@"',                  desc = "mpv", orphan = true, for = "unix" },
+    { run = 'mpv --loop --fullscreen --volume=65 --mute "$@" || vlc "$@"',                  desc = "mpv", orphan = true, for = "unix" },
 ]
 
 # Rules to open items

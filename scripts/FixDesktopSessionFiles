@@ -24,7 +24,15 @@ function Wayland_sway_desktop() {
 [Desktop Entry]
 Name=Sway (Wayland)
 Comment=An i3-compatible Wayland compositor
-Exec=env XDG_SESSION_TYPE=wayland XDG_CURRENT_DESKTOP=sway XDG_SESSION_DESKTOP=sway XDG_BACKEND=wayland QT_QPA_PLATFORM=wayland XDG_DESKTOP_PORTAL_BACKEND=wlr GDK_BACKEND=wayland WLR_RENDERER=vulkan sway --unsupported-gpu
+Exec=env \
+    XDG_CURRENT_DESKTOP=sway \
+    XDG_SESSION_DESKTOP=sway \
+    XDG_SESSION_TYPE=wayland \
+    QT_QPA_PLATFORM=wayland \
+    GDK_BACKEND=wayland \
+    XDG_DESKTOP_PORTAL_BACKEND=wlr \
+    QT_QPA_PLATFORMTHEME=qt6ct \
+    WLR_RENDERER=vulkan sway --unsupported-gpu
 Type=Application
 Keywords=tiling;wayland;compositor;sway;
 
@@ -38,7 +46,9 @@ function Wayland_hyprland_desktop() {
 Name=Hyprland (Wayland)
 Comment=An intelligent dynamic tiling Wayland compositor
 DesktopNames=Hyprland
-Exec=env XDG_BACKEND=wayland QT_QPA_PLATFORM=wayland XDG_DESKTOP_PORTAL_BACKEND=wlr GDK_BACKEND=wayland WLR_RENDERER=vulkan Hyprland
+Exec=env \
+    QT_QPA_PLATFORM=wayland \
+    WLR_RENDERER=vulkan Hyprland
 Type=Application
 Keywords=tiling;wayland;compositor;hyprland;
 
@@ -52,7 +62,7 @@ function Wayland_plasma_desktop() {
 Name=Plasma (Wayland)
 Comment=Plasma by KDE
 DesktopNames=KDE
-Exec=/usr/lib/plasma-dbus-run-session-if-needed /usr/bin/startplasma-wayland
+Exec=env QT_QPA_PLATFORMTHEME="" startplasma-wayland
 TryExec=/usr/bin/startplasma-wayland
 Keywords=plasma;kde;
 

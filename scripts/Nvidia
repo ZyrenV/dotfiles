@@ -1,9 +1,40 @@
 #!/usr/bin/env bash
 
-FLAGS="$@"
+function main() {
+    local binary=("$1"); shift
+    local -a args=("$@")
 
-__NV_PRIME_RENDER_OFFLOAD=1 \
-    __VK_LAYER_NV_optimus=NVIDIA_only \
-        __GLX_VENDOR_LIBRARY_NAME=nvidia "${FLAGS}" &
-disown
+    if [[ -z "${binary}" ]];then
+        printf '[ERROR]: %s\n' "No game binary?"
+        return 1
+    fi
+
+    if ! command -v "${binary}" &> /dev/null;then
+        binary=("./${binary[@]}")
+    fi
+
+    if ! ls -l "${binary}" &> /dev/null;then
+        printf '[ERROR]: %s; %s\n' "${binary}" "No such file or binary?"
+        return 1
+    fi
+
+    local vulkan_icd_path=${VK_ICD_FILENAMES:-"/usr/share/vulkan/icd.d/nvidia_icd.json"}
+    local vk_optimus_layer=${__VK_LAYER_NV_optimus:-"NVIDIA_only"}
+    local glx_vendor_name=${__GLX_VENDOR_LIBRARY_NAME:-"nvidia"}
+    local -i prime_render_offload=${__NV_PRIME_RENDER_OFFLOAD:-1}
+    local -i dxvk_hud_setting=${DXVK_HUD:-1}
+    local -i mangohud_enabled=${MANGOHUD:-1}
+
+    local -a environment_variables=(
+        VK_ICD_FILENAMES=${vulkan_icd_path}
+        __VK_LAYER_NV_optimus=${vk_optimus_layer}
+        __GLX_VENDOR_LIBRARY_NAME=${glx_vendor_name}
+        __NV_PRIME_RENDER_OFFLOAD=${prime_render_offload}
+        DXVK_HUD=${dxvk_hud_setting}
+        MANGOHUD=${mangohud_enabled}
+    )
+    exec env "${environment_variables[@]}" "${binary[@]}" "${args[@]}"
+}
+
+main "$@"
 

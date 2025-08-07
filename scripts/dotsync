@@ -3,7 +3,7 @@
 set -euo pipefail
 IFS=$'\n\t'
 
-CONFIG_FILE="${HOME}/.dotsync.config"
+CONFIG_FILE="${HOME}/.custom/dotsync/config"
 
 # command in use to copy stuff
 SYNC_="rsync"

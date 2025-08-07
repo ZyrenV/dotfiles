@@ -17,7 +17,7 @@ font pango: SourceCodePro Large 4
     set $output $output
 
     # workspace $output output $output
-    output $output  background imgs/dark_1.jpg fill
+    output $output  background #343434 solid_color
     output $output  mode 1920x1080@144Hz
     output $output  scale 1
     output $output  transform normal
@@ -90,7 +90,7 @@ font pango: SourceCodePro Large 4
 ### Auto Start ###
     exec --no-startup-id /usr/lib/polkit-kde-authentication-agent-1
     # Start's waybar
-    exec --no-startup-id ${HOME}/.config/sway/theme.sh
+    exec --no-startup-id ${HOME}/.config/sway/waybar/toggle_theme.sh
 
     exec --no-startup-id autotiling
     exec --no-startup-id ${HOME}/.scripts/something
@@ -103,13 +103,16 @@ font pango: SourceCodePro Large 4
     exec_always --no-startup-id bash -c 'sock="${XDG_RUNTIME_DIR}/foot${WAYLAND_DISPLAY/#/-}.sock"; [[ -S "${sock}" ]] || foot --server=${sock}'
     exec_always --no-startup-id ${HOME}/.bin/NowPlaying
     exec_always --no-startup-id pkill -x swayidle; swayidle -w \
-            timeout 100 "${HOME}/.config/sway/lock.sh" \
+            timeout 100 "${HOME}/.config/sway/lock_screen/lock.sh" \
             resume "swaymsg 'output * power on'" \
-            before-sleep "${HOME}/.config/sway/lock.sh set_bg"
+            before-sleep "${HOME}/.config/sway/lock_screen/lock.sh set_bg"
 
 ### Window rules ###
     # Set opacity for all windows
-        for_window [app_id=".*"] opacity 0.99
+        set $vulkan 0.985
+        set $opengl 0.885
+
+        for_window [app_id=".*"] opacity $vulkan
     # Border of newly spawned window
         for_window [class=".*"] border pixel 1
     # Border of floating window
@@ -270,13 +273,22 @@ font pango: SourceCodePro Large 4
     #* Executable Binaries *#
         # Keyboard centric browser
             bindsym $mod+F1 exec env QT_QPA_PLATFORM=xcb QT_WEBENGINE_DISABLE_GPU=1 qutebrowser
+        # Browser 1
+            bindsym $mod+F2 exec ${HOME}/.browser 2
+        # Browser 2
+            bindsym $mod+F3 exec ${HOME}/.browser 3
+        # Browser 4
+            bindsym $mod+F4 exec ${HOME}/.browser 4
+        # Browser 5
+            bindsym $mod+F5 exec ${HOME}/.browser 5
+
         # Bring my Text-fu terminal
             bindsym $mod+Return exec footclient
             bindsym $mod+Shift+Return exec alacritty
             bindsym $mod+Alt+Return exec kitty
 
         # Good File Managers
-            bindsym Alt+E exec env XDG_CURRENT_DESKTOP=kde GTK_THEME=Adwaita:dark QT_QPA_PLATFORMTHEME=qt6 dolphin
+            bindsym Alt+E exec env XDG_CURRENT_DESKTOP=kde GTK_THEME=Adwaita:dark QT_QPA_PLATFORMTHEME=qt6ct dolphin
             bindsym $mod+E exec env XDG_CURRENT_DESKTOP=kde nautilus
         # Lauch wofi, my friend who fetches all the applications for me
             bindsym Alt+Space exec $menu_wofi
@@ -358,11 +370,8 @@ font pango: SourceCodePro Large 4
 
     #* Scripts *#
         # An application launcher
-            bindsym F10 exec bash -c 'FILE="${HOME}/.config/sway/theme.sh"; pgrep -f "${FILE}" || "${FILE}"; pkill -x waybar; pkill -SIGUSR1 -f ${FILE}'
-            bindsym $mod+F10 exec killall waybar
-
-        # An application launcher
-            bindsym $mod+D exec ${HOME}/.config/waybar/scripts/application_launcher
+            bindsym F10 exec bash -c 'FILE="${HOME}/.config/sway/waybar/toggle_theme.sh"; pgrep -f "${FILE}" || "${FILE}"; pkill -x waybar; pkill -SIGUSR1 -f ${FILE}'
+            bindsym $mod+F10 exec pkill -f "toggle_theme.sh"; pkill -f '.*bin/waybar'
 
         # Create cava windows to look cool
             bindsym $mod+P exec "${HOME}/.bin/CavaInstances"
@@ -370,7 +379,7 @@ font pango: SourceCodePro Large 4
 
         # Execute whatever the hell that script does
             bindsym $mod+grave+G exec bash -c \
-               '$(foot -e ${HOME}/.scripts/exec_me)'
+               '${HOME}/.exec_me'
 
         # Journal time: Let's document the mess
             bindsym $mod+grave+J exec bash -c \

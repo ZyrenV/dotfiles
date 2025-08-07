@@ -32,13 +32,30 @@ function LOG() {
 
 # Usage message
 function Usage() {
+    local config_file="$1"
+    local script_basename="$(basename "$0")"
     printf '\n%b\n' "${HL}Usage${NC}: $(basename "$0") [boot] [options] <profile1> <profile2> ...\n"
-    printf "  ${MSG_COL}%-18b${NC} %s\n" \
-        "boot"           "Boot from ISO + disk image" \
-        "<profile>"      "Profile name (defined in ~/.custom/Vm/profiles)" \
-        "-f, --fullscreen" "Enable fullscreen mode" \
-        "-edit"          "Edit the profiles config file" \
-        "-h, --help"     "Show this help message"
+    printf "  ${MSG_COL}%-18b${NC} %b\n" \
+        "boot"              "Boot from ISO + disk image" \
+        "<profile>"         "Profile name (defined in $(ColorPath "${config_file}"))" \
+        "-f, fullscreen"    "Enable fullscreen mode" \
+        "-e, edit"          "Edit the profiles config file"
+
+    printf "\n${HL}Other flags:${NC}\n"
+    printf "  ${MSG_COL}%-18b${NC} %b\n" \
+        "create-image"      "Create new disk image" \
+        "format"            "Specify the disk format when creating a new image" \
+        "new-profile"       "Add a new profile to $(ColorPath "${config_file}") configuration" \
+        "write"             "Write the current arugment values to the configuration" \
+        "comment"           "Provide a comment when creating a new profile" \
+        "-h, help"          "Show this help message"
+
+    printf "\n${HL}Examples:${NC}\n"
+    printf "  %s\n     ${HL}%b${NC}\n" \
+        "Start with disk only"          "${script_basename} my_profile" \
+        "Boot with Disk + ISO"          "${script_basename} boot my_profile" \
+        "Create new image"              "${script_basename} profile=my_profile create-new-image image_name raw 20G" \
+        "Create new profile"            "${script_basename} create-profile my_profile iso=/path/to/ISO.iso img=/path/to/disk.img"
     printf '%s\n' ""
 }
 
@@ -78,25 +95,54 @@ function ListProfiles() {
     done
 }
 
-function WriteDefaultProfile() {
-    local file="$1"
-    local img="${HOME}/qemu_vm/your_image.raw"
-    local iso="${HOME}/qemu_vm/your_iso.iso"
-    cat >> "${file}" << EOF
-#!/usr/bin/env bash
+function CreateDiskImg() {
+    local img="$1"
+    local format="$2"
+    local size="$3"
+    [[ "${img}" == *.* ]] || img="${img}.${format}"
+    qemu-img create -f ${format:-"raw"} "${img}" "${size:-"20G"}"
+    LOG info "Disk created:"
+    printf '    %s %-4s = %s\n' \
+        "Disk image:  "  ""  "${img}" \
+        "Disk size:   "  ""  "${size:-"20G"}" \
+        "Disk format: "  ""  "${format:-"raw"}"
+}
 
-# Replace 'your_profile_name' with a name based on your use case
-your_profile_name=(
-    # Path to disk image (replace with the actual path)
+function WriteToProfile() {
+    local config_file="$1"
+    local profile_name="${2:-"default"}"
+    local img="${3:-""}"
+    local iso="${4:-""}"
+    local comment="$5"
+    msg="${profile_name^}"
+    if [[ -n "${comment}" ]];then
+        msg+=": ${comment^}"
+    fi
+
+    mapfile -t available_profiles < <(grep -o '^[A-Za-z_]*=(' "${config_file}" | sed 's/=(//')
+    for (( i=0; i < ${#available_profiles[@]}; i++ )); do
+        if [[ "${profile_name}" == "${available_profiles[$i]}" ]]; then
+            return 1
+        fi
+    done
+
+    [[ -s "${config_file}" ]] || echo '#!/usr/bin/env bash' > "${config_file}"
+    cat >> "${config_file}" << EOF
+
+# ${msg}
+${profile_name}=(
+    # Disk image
     "${img}"
 
-    # Path to ISO file (replace with the actual path)
+    # ISO file
     "${iso}"
 )
 
-# vim:filetype=bash
-
 EOF
+    if [[ $? -eq 0 ]]; then
+        LOG info "New profile added: Profile: '${profile_name}'"
+    fi
+    return 0
 }
 
 function print_row() {
@@ -114,7 +160,6 @@ function boot_VM() {
     local -i full_scr=$5
     local profile_in_use="$6"
     local ram_display=""
-
 
     local -a qemu_flags_arr=(
         "-m" "${ram}"
@@ -185,31 +230,31 @@ function main() {
     # Flags
     local -a arg_array=("$@")
 
-    [[ ${#arg_array[@]} -eq 0 ]] && {
-        Usage
-        return 0
-    }
-
     local disk_img="" iso_img="" disk_format=""
     local -a requested_profiles=()
-    local config_file="${HOME}/.custom/Vm/profiles"
+    local -g config_dir="${HOME}/.custom/vmctl"
+    local config_file="${config_dir}/profiles" profile_name=""
+    local comment="" create_img=""
 
     local -i boot=0 full_scr=0
     local -i ram="$(( $(awk '/MemTotal/ { print $2 }' /proc/meminfo) / 1640 ))"
+    local -i should_create_profile=0 should_create_img=0
+    local disk_size=""
 
-    mkdir -p "${HOME}/.custom/Vm"
+    [[ ${#arg_array[@]} -eq 0 ]] && {
+        Usage "${config_file}"
+        return 0
+    }
+
+    mkdir -p "${config_dir}"
 
     if [[ -s "${config_file}" && -f "${config_file}" ]]; then
         source "${config_file}"
-
-        if grep -q "your_profile_name=" "${config_file}"; then
-        LOG warn "Please rename 'your_profile_name' in the profile to something meaningful."
-    fi
-
     else
         LOG warn "No profile found. Creating a default"
-        WriteDefaultProfile "${config_file}" && \
+        if WriteToProfile "${config_file}"; then
             LOG info "New default profile created at '$(ColorPath "${config_file}")'"
+        fi
     fi
 
     # Parse args
@@ -231,11 +276,91 @@ function main() {
             im*g*|-*im*g*)
                 disk_img="${arg_array[$((i+1))]}"
                 ;;
-            iso|-*iso)
+            iso*|-*iso*)
                 iso_img="${arg_array[$((i+1))]}"
                 ;;
             ram|-*ram)
                 ram="${arg_array[$((i+1))]}"
+                ;;
+            create*im*=*|-*create*im*=*)
+                create_img="${arg#*=}"
+                if [[ -n "${create_img}" ]]; then
+                    should_create_img=1
+                else
+                    LOG fatal "No image specified"
+                fi
+                local next_arg="${arg_array[$((i+1))]}"
+                case "$next_arg" in
+                    raw|qcow2)
+                        disk_format="$next_arg"
+                        i=$((i+1))
+                        ;;
+                esac
+                if [[ -n "${create_img#*.}" && -z "${disk_format}" ]]; then
+                    disk_format="${create_img#*.}"
+                else
+                    disk_format="${disk_format}"
+                fi
+                next_arg="${arg_array[$((i+1))]}"
+                if [[ "${next_arg}" =~ ^[0-8]+(K|M|G)$ ]]; then
+                    disk_size="${next_arg}"
+                    i=$((i+1))
+                fi
+                unset next_arg
+                ;;
+            create*im*|-*create*im*)
+                create_img="${arg_array[$((i+1))]}"
+                if [[ -n "${create_img}" ]]; then
+                    should_create_img=1
+                    i=$((i+1))
+                else
+                    LOG fatal "No image specified"
+                fi
+                local next_arg="${arg_array[$((i+1))]}"
+                case "${next_arg}" in
+                    raw|qcow2)
+                        disk_format="${next_arg}"
+                        i=$((i+1))
+                        ;;
+                esac
+                if [[ -z "${disk_format}" ]]; then
+                    disk_format="${create_img#*.}"
+                else
+                    disk_format="${disk_format}"
+                fi
+                next_arg="${arg_array[$((i+1))]}"
+                if [[ "${next_arg}" =~ ^[0-8]+(K|M|G)$ ]]; then
+                    disk_size="${next_arg}"
+                    i=$((i+1))
+                fi
+                unset next_arg
+                ;;
+            new*pro=*|create*pro=*|pro*=*|-*create*pro*=*|-*new*pro*=*)
+                profile_name="${arg#*=}"
+                [[ -z "${profile_name}" ]] && LOG fatal "No profile specified"
+                should_create_profile=1
+                ;;
+            new*pro*|create*pro*|pro*|-*create*pro*|-*new*pro*)
+                profile_name="${arg_array[$((i+1))]}"
+                [[ -z "${profile_name}" ]] && LOG fatal "No profile specified"
+                should_create_profile=1
+                i=$((i+1))
+                ;;
+            comm*)
+                comment="${arg}"
+                ;;
+            comm*=*)
+                comment="${arg_array[$((i+1))]}"
+                ;;
+            for*)
+                disk_format="${arg_array[$((i+1))]}"
+                ;;
+            pro*=*|-*pro*=*)
+                profile_name="${arg#*=}"
+                ;;
+            pro*|-*pro*)
+                profile_name="${arg_array[$((i+1))]}"
+                i=$((i+1))
                 ;;
             f|-f|-*full*|*full*)
                 full_scr=1
@@ -248,8 +373,8 @@ function main() {
                 EditConfigFile "${config_file}"
                 return 0
                 ;;
-            h|-h|-*help)
-                Usage
+            h|-h|-*help|help)
+                Usage "${config_file}"
                 return 0
                 ;;
             [A-Za-z_]*)
@@ -261,19 +386,69 @@ function main() {
                 ;;
             *)
                 LOG warn "Unknown argument: '${arg}'"
-                Usage
+                Usage "${config_file}"
                 return 1
                 ;;
         esac
     done
 
-    if [[ ${#requested_profiles[@]} -eq 0 ]]; then
-        LOG fatal "No profile name was given"
+    if [[ -n "${profile_name}" ]]; then
+        requested_profiles+=("${profile_name}")
     fi
+
+    if [[ $should_create_img -eq 1 ]]; then
+        [[ -z "${profile_name}" ]] && LOG fatal "No profile name specified"
+        [[ -z "${create_img}" ]] && LOG fatal "No disk image specified"
+        [[ -z "${disk_format}" ]] &&  LOG fatal "No disk format specified"
+        [[ -z "${disk_size}" || "${disk_size}" == "0" ]] && LOG fatal "No image size specified"
+        mkdir -p "${config_dir}/${profile_name}"
+        CreateDiskImg "${config_dir}/${profile_name}/${create_img}" "${disk_format}" "${disk_size}"
+        [[ $? -eq 0 ]] && return 0 || return 1
+    fi
+
+    if [[ $should_create_profile -eq 1 ]]; then
+        local temp_iso_img="" temp_create_img=""
+        if [[ -z "${iso_img}" ]]; then
+            LOG warn "No ISO image is given"
+            temp_iso_img=""
+        elif [[ "${iso_img}" != */* ]]; then
+            temp_iso_img="${config_dir}/${profile_name}/${iso_img}"
+        else
+            temp_iso_img="${iso_img}"
+        fi
+
+        if [[ -z "${disk_img}" ]]; then
+            LOG fatal "No disk image is given"
+        elif [[ "${disk_img}" != */* ]]; then
+            temp_iso_img="${config_dir}/${profile_name}/${disk_img}"
+        else
+            temp_iso_img="${iso_img}"
+        fi
+
+        if [[ "${config_dir}/${profile_name}/${create_img}" ]]; then
+            temp_create_img="${config_dir}/${profile_name}/${create_img}"
+        fi
+
+        WriteToProfile "${config_file}" "${profile_name}" "${disk_img:-"${temp_create_img}"}" "${iso_img:-"${temp_iso_img}"}" "${comment}" || \
+            LOG warn "'${profile_name}' already exists"
+        [[ $? -eq 0 ]] && return 0 || return 1
+    fi
+
+    if [[ ${#requested_profiles[@]} -eq 0 ]]; then
+        [[ -n "${profile_name}" ]] || LOG fatal "No profile name was given"
+    fi
+
+    source "${config_file}"
 
     for req_profile in "${requested_profiles[@]}"; do
 
-        load_profile "${req_profile}" disk_img iso_img disk_format
+        [[ -z "${disk_format}" ]] && disk_format="${iso_img#*.}"
+
+        [[ -n ${iso_img} ]] && boot=1
+
+        if [[ -z "${disk_img}" || -z "${iso_img}" || -z "${disk_format}" ]]; then
+            load_profile "${req_profile}" disk_img iso_img disk_format
+        fi
 
         # Path checks for disk image
         if [[ -z "${disk_img}" ]]; then

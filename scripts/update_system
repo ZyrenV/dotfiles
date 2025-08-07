@@ -17,13 +17,13 @@ update_aur() {
     printf '\n%s\n\n' "================== AUR Update =================="
     printf '\n%s\n\n' "================== AUR Update ==================" &>> "${LOG_FILE}"
     if command -v paru &>/dev/null; then
-        if ! run_cmd paru --verbose --skipreview --noconfirm -Syyu; then
-            run_cmd paru --verbose --skipreview --noconfirm -Syu || \
-                run_cmd yay --noconfirm --answerdiff=None --answerclean=None -Syu
+        if ! run_cmd sudo --user=$(id 1000 --user --name) paru --sudoloop --verbose --skipreview --noconfirm -Syyu; then
+            run_cmd sudo --user=$(id 1000 --user --name) paru --sudoloop --verbose --skipreview --noconfirm -Syu || \
+                run_cmd sudo --user=$(id 1000 --user --name) yay --sudoloop --noconfirm --answerdiff=None --answerclean=None -Syu
         fi
     elif command -v yay &>/dev/null; then
-        run_cmd yay --noconfirm --answerdiff=None --answerclean=None -Syyu || \
-            run_cmd yay --noconfirm --answerdiff=None --answerclean=None -Syu
+        run_cmd sudo --user=$(id 1000 --user --name) yay --sudoloop --noconfirm --answerdiff=None --answerclean=None -Syyu || \
+            run_cmd sudo --user=$(id 1000 --user --name) yay --sudoloop --noconfirm --answerdiff=None --answerclean=None -Syu
     else
         run_cmd sudo pacman --verbose --noconfirm -Syyu || \
             run_cmd sudo pacman --verbose --noconfirm -Syu

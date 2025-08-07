@@ -67,6 +67,7 @@ inoremap <silent><expr> <CR> pumvisible() ? coc#_select_confirm()
 
 " Set color scheme to
 colorscheme gruvbox
+colorscheme molokai
 " Enable syntax highlighting
 syntax enable
 " Set tab width to 4 spaces

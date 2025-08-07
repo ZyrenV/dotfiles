@@ -500,8 +500,8 @@ function GetConfig() {
     unset -f get_useInput
 }
 
-## Concatenate
-function Cat() {
+## Concatenate config
+function Cat_config() {
     local file="$1"
     local should_color="always"
     if command -v bat &> /dev/null; then
@@ -519,6 +519,8 @@ function EditConfig() {
     local profile="$1"
     local -i force_profile_creation=$2 col=$3
     local tmp_data="" should_color="always"
+    local yes_no=""
+
     if [[ ! -s "${profile}" ]]; then
         WriteConfigTemplate "${profile}" "$force_profile_creation" || FATAL "Cannot write '$(ColorPath ${profile})'. Write aborted" 1
     fi
@@ -535,14 +537,16 @@ function EditConfig() {
             if [[ ${#tmp_data} > 0 ]]; then
                 LOG info "Your changes"
                 printf '%s\n' "${tmp_data}"
-                printf '%s' "Make changes? (y|n): "
-                read -r yes_no
+                printf '%s' "Make changes? (y)es|(n)o: ";  read -r yes_no
                 if [[ "${yes_no}" =~ ^(yes|Yes|y)$ ]]; then
-                    echo && echo
-                    for i in {1..60}; do printf '%s' "#"; done; printf '\n'
-                    Cat "${temp_edit}" $col
-                    for i in {1..60}; do printf '%s' "#"; done; printf '\n'
                     cp "${temp_edit}" "${profile}"
+                    printf '%s' "Show config file? (y)es|(n)o: " ; read -r yes_no
+                    if [[ "${yes_no}" =~ ^(yes|Yes|y)$ ]]; then
+                        echo && echo
+                        for i in {1..60}; do printf '%s' "#"; done; printf '\n'
+                        Cat_config "${temp_edit}" $col
+                        for i in {1..60}; do printf '%s' "#"; done; printf '\n'
+                    fi
                 fi
             fi
         fi
@@ -950,7 +954,7 @@ function main() {
     # Concatenate profile
     if [[ "$cat_config" -eq 1 ]]; then
         LOG info "Profile: $(ColorPath ${config_profile})" && echo
-        Cat "${config_profile}" $colors_
+        Cat_config "${config_profile}" $colors_
     fi
 
     # Backup profile
@@ -1004,6 +1008,7 @@ function main() {
         ### Log the final messages
         echo && LOG info "SSH into '${CONFIG[HOST]}' from profile $(ColorPath ${config_profile})" && echo
         ssh -p "${CONFIG[PORT]}" "${CONFIG[USER]-"root"}@${CONFIG[HOST]}"
+        return 0
     fi
 
     # No mount, SSH only
@@ -1018,10 +1023,11 @@ function main() {
         echo && LOG info "SSH into '${CONFIG[HOST]}' from profile $(ColorPath ${config_profile})" && echo
         LOG debug "===>>> Call DrawBanner()"
         DrawBanner
-        ssh -p "${CONFIG[PORT]}" "${CONFIG[USER]-"root"}@${CONFIG[HOST]}"
-    fi
 
-    [[ -f "${config_profile}" ]] || return 1
+        [[ ${CONFIG[USER]} == u0_a* ]] && TermuxUser
+        ssh -p "${CONFIG[PORT]}" "${CONFIG[USER]-"root"}@${CONFIG[HOST]}"
+        return 0
+    fi
 
     ## No SSH, Mount only
     if [[ $mount -eq 1 ]] || [[ $# -eq 1 && -n $requested_profile_base ]]; then
@@ -1042,6 +1048,7 @@ function main() {
         echo && LOG info "Mounting remote: '${CONFIG[HOST]}' from profile $(ColorPath ${config_profile})"
         SetUpSSH_CMD "sshfs_cmd"
         MountSSHFS_ "${sshfs_cmd[@]}"
+        return 0
     fi
 }
 

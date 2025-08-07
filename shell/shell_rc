@@ -92,7 +92,9 @@ alias radeontop="radeontop --color"
 alias exiftool="/usr/bin/vendor_perl/exiftool"
 alias metadata="/usr/bin/vendor_perl/exiftool"
 alias qutebrowser="QT_QPA_PLATFORM=xcb QT_WEBENGINE_DISABLE_GPU=1 qutebrowser "$@""
+alias clear_systemd_journal_logs="sudo journalctl --rotate && sudo journalctl --vacuum-size=1K && sudo journalctl --vacuum-time=1s"
 alias lsblk="lsblk --paths -o+SIZE --fs"
+alias Dmesg="dmesg --color=always | less"
 alias Cat="/usr/bin/bat --theme-dark=TwoDark --color=always --paging=always --decorations=never"
 
 ### Random aliasing
@@ -288,15 +290,32 @@ function rot13() {
 }
 
 ### Fetch defined https_proxy and https_proxy variable to current shell environment
-function Tor_proxy() {
+function Tor() {
     u_set="${1:-"NULL"}"
-    if [[ $u_set =~ ^(u|unset|uset)$ ]]; then
+
+    set_var() {
+        export http_proxy="socks5://127.0.0.1:9050"
+        export https_proxy="socks5://127.0.0.1:9050"
+    }
+
+    unset_var() {
         unset http_proxy
         unset https_proxy
-        exit 0
+    }
+
+    case "${arg}" in
+        un*) unset_var && return 0 ;;
+        sto*) sudo pkill -f "sudo tor" && return 0;;
+    esac
+
+    if pgrep -f "sudo tor" &> /dev/null; then
+        set_var
+        return 0
     fi
-    export http_proxy="socks5://127.0.0.1:9050"
-    export https_proxy="socks5://127.0.0.1:9050"
+    sudo pkill -f "sudo tor"
+    sudo tor &> /dev/null & disown
+    set_var
+    unset -f set_var unset_var
 }
 
 ### Extract a tar archive
@@ -600,9 +619,10 @@ function Compile() {
 function sway_vulkan() {
     cd ~/
     local num=$1
+    local -i num_=0
     local LOG_FILE="/tmp/sway.log"
-    [[ $num -eq 0 ]] && num=128
-    [[ $num -eq 1 ]] && num=129
+    [[ $num -eq 0 ]] && num_=128
+    [[ $num -eq 1 ]] && num_=129
     # Tells Video Acceleration API (VA-API) to use the
     # intel / radeonsi / vdpau(legacy for Nvidia) backend for video decoding.
     export LIBVA_DRIVER_NAME=radeonsi
@@ -617,7 +637,7 @@ function sway_vulkan() {
     export WLR_NO_HARDWARE_CURSORS=1
     # Tells wlroots which GPU device to use for DRM rendering
     # export WLR_DRM_DEVICES=/dev/dri/card0:/dev/dri/card1
-    export WLR_DRM_DEVICES=/dev/dri/card0:/dev/dri/card1
+    export WLR_DRM_DEVICES=/dev/dri/card$num
     # Forces wlroots to use Vulkan renderer.
     # gles2 for opengl or pixman CPU only
     export WLR_RENDERER=vulkan
@@ -652,7 +672,7 @@ function Paths() {
     [[ -n $ZSH_VERSION ]] && emulate -LR bash
     local IFS=$':' i=0
     for path in $PATH; do
-        printf '%-2s %-2s %s\n' "${i}" '->' "${path}"
+        sed "s@${HOME}@\${HOME}@g" <(printf '%-2s %-2s %s\n' "${i}" '->' "${path}")
         ((i++))
     done
 }; alias show_path="Paths"; alias print_path="Paths"
@@ -674,46 +694,36 @@ function RandomColors() {
     pastel random | pastel format "${format:-"hex"}"
 }
 
-### Set refresh rate to 144Hz
-function 144hz() {
+### Set refresh rate
+function set_refresh_rate_to() {
+    local -i req_hz=$1
     local output="" mode=""
     local px="" hz=""
-    local -i req_hz=144
+    local local_grep="$(cut -d' ' -f2 <(whereis grep))"
 
-    if [[ ${XDG_SESSION_TYPE} == wayland ]]; then
+    if [[ "${XDG_SESSION_TYPE}" == wayland ]]; then
         output="$(wlr-randr | head -n1 | cut -d' ' -f1)"
-        px=$(wlr-randr | grep --color=never current | awk -F' ' '{ print $1 }')
-        hz=$(wlr-randr | grep --color=never -P "(?=.*${px})(?=.*${req_hz})" | grep --color=never -o -E "${req_hz}\.[0-9]+")
+        px=$(wlr-randr | ${local_grep} current | awk -F' ' '{ print $1 }')
+        hz=$(wlr-randr | ${local_grep} -P "(?=.*${px})(?=.*${req_hz})" | ${local_grep} -o -E "${req_hz}\.[0-9]+")
         mode="${px}px@${hz}Hz"
         wlr-randr --output ${output} --mode ${mode} && exit 0 || LOG error "Cannot set $req_hz"
-    elif [[ ${XDG_SESSION_TYPE} == x11 ]]; then
-        output=$(xrandr | grep --color=never 'connected primary' | cut -d' ' -f1)
-        px=$(xrandr | grep --color=never '\*' | awk -F' ' '{ print $1 }')
-        hz=$(xrandr | grep --color=never "${px}" | grep --color=never -Eo "${req_hz}\.[0-9]+")
+    elif [[ "${XDG_SESSION_TYPE}" == x11 ]]; then
+        output=$(xrandr | ${local_grep} 'connected primary' | cut -d' ' -f1)
+        px=$(xrandr | ${local_grep} '\*' | awk -F' ' '{ print $1 }')
+        hz=$(xrandr | ${local_grep} "${px}" | ${local_grep} -Eo "${req_hz}\.[0-9]+")
         LOG info "xrandr --output ${output} --mode ${px} --rate ${hz}"
         xrandr --output "${output}" --mode "${px}" --rate "${hz}" || LOG error "Cannot set $req_hz"
     fi
 }
 
+### Set refresh rate to 144Hz
+function 144hz() {
+    set_refresh_rate_to 144
+}
+
 ### Set refresh rate to 60Hz
 function 60hz() {
-    local output="" mode=""
-    local px="" hz=""
-    local -i req_hz=60
-
-    if [[ ${XDG_SESSION_TYPE} == wayland ]]; then
-        output="$(wlr-randr | head -n1 | cut -d' ' -f1)"
-        px=$(wlr-randr | grep --color=never current | awk -F' ' '{ print $1 }')
-        hz=$(wlr-randr | grep --color=never -P "(?=.*${px})(?=.*${req_hz})" | grep --color=never -Eo "${req_hz}\.[0-9]+")
-        mode="${px}px@${hz}Hz"
-        wlr-randr --output ${output} --mode ${mode} && exit 0
-    elif [[ ${XDG_SESSION_TYPE} == x11 ]]; then
-        output=$(xrandr | grep --color=never 'connected primary' | cut -d' ' -f1)
-        px=$(xrandr | grep --color=never '\*' | awk -F' ' '{ print $1 }')
-        hz=$(xrandr | grep --color=never "${px}" | grep --color=never -Eo "${req_hz}\.[0-9]+")
-        LOG info "xrandr --output ${output} --mode ${px} --rate ${hz}"
-        xrandr --output "${output}" --mode "${px}" --rate "${hz}" || LOG error "Cannot set $req_hz"
-    fi
+    set_refresh_rate_to 60
 }
 
 ### AI in terminal
@@ -821,7 +831,7 @@ function grammer_check() {
 
         echo "$json" | jq -r --arg red "$red" --arg green "$green" --arg yellow "$yellow" --arg reset "$reset" '
         if (.matches | length) == 0 then
-            "\($green)No issues found ✅\($reset)"
+            "\($green)No issues found \($reset)"
         else
             .matches[] |
                 "\($red)Error:\($reset) \(.message)\n" +
@@ -877,6 +887,11 @@ function SetPower() {
     local profile="$1"
     local -i stapm fast slow apuslow
 
+    command -v ryzenadj &> /dev/null || {
+        LOG error "'ryzenadj' not found, install it"
+        return 1
+    }
+
     case "${profile}" in
         verylow|very-low)
             stapm=5000 fast=5000 slow=5000 apuslow=5000
@@ -929,39 +944,42 @@ function SetPower() {
     sudo ryzenadj --stapm-limit=$stapm --fast-limit=$fast --slow-limit=$slow --apu-slow-limit=$apuslow 2> /dev/null
 }
 
-function Browser() {
-    [[ -n $ZSH_VERSION ]] && emulate -LR bash
-    local profile_dir="${HOME}/.profiles"
-    local browser_name="$1"
-    local requested_profile="$2"
-    local -i should_return=1
-    local profile browser
+function browser() {
+    local firefox_profile="$1" browser
+    local firefox_profile_dir="${HOME}/.profiles"
 
-    local -a supported_browsers=( firefox waterfox librewolf )
-
-    for browser in "${supported_browsers[@]}"; do
-        if [[ "${browser_name}" == "${browser}" ]]; then
-            should_return=0
-        fi
-    done
-
-    if [[ $should_return -eq 1 ]]; then
-        LOG error "Unsupported browser '${browser_name}'"
+    if ! [[ "${XDG_SESSION_DESKTOP}" == "sway" ]]; then
+        LOG error "You are not running sway"
         return 1
     fi
-    for profile in ${profile_dir}/*; do
-        profile=$(basename "${profile}")
-        if [[ "${requested_profile}" == "${profile}" ]]; then
-            matched_profile="${profile_dir}/${profile}"
-        fi
-    done
-    if [[ -n ${matched_profile} ]]; then
-        $browser_name --profile "${matched_profile}" 2> /dev/null
+
+    if command -v waterfox &> /dev/null; then
+        browser="waterfox"
+    elif command -v firefox &> /dev/null; then
+        LOG info "Waterfox not found, using firefox"
+        browser="firefox"
     else
-        LOG error "No profiles matched"
+        LOG error "Waterfox not installed"
+        return 1
     fi
 
-}; alias browser="Browser" alias Waterfox="browser waterfox"
+    mkdir -p "${firefox_profile_dir}"
+
+    if [[ "${firefox_profile}" != */* ]]; then
+        firefox_profile="${firefox_profile_dir}/${firefox_profile:-"dev"}"
+    else
+        firefox_profile="${firefox_profile}"
+    fi
+
+    waterfox --profile "${firefox_profile}" &> /dev/null & disown
+    timeout --signal SIGKILL 6s bash -c "
+        while [[ \"\$(swaymsg -t get_tree -r | jq -r '.. | select(type == \"object\" and .app_id == \"${browser}\") | .app_id'; sleep 0.01)\" != \"${browser}\" ]]; do
+            sleep 0.01
+        done
+        sleep 0.2
+        swaymsg '[app_id=\"${Browser}\"] resize set width 1444 height 784'
+    "
+}
 
 ### Download any video
 function Yt-dlp_download() {
@@ -989,13 +1007,86 @@ function UpdateGrub() {
 
 }
 
+### Sort by file size
+function Sort() {
+    local -a total_args=("$@")
+    if [[ ${#total_args} -eq 0 ]];then
+        LOG error "Please profile items"
+        return 1
+    fi
+    du -sh "${total_args[@]}" | /usr/bin/sort --numeric-sort
+}
+
+function ToggleDrivers() {
+    local -a args=("$@")
+
+    toggle_driver_() {
+        local module="$1"
+        local device="$2"
+        [[ $# -ne 2 ]] && return 1
+        if lsmod | grep -q "^${module}"; then
+            sudo modprobe -r "${module}" && LOG info "Disabled ${device}"
+        else
+            sudo modprobe "${module}" && LOG info "Enabled ${device}"
+        fi
+    }
+
+    for arg in "${args[@]}"; do
+        case ${arg} in
+            [Cc][Aa][Mm]*) # camera
+                toggle_driver_ "uvcvideo" "Camera"
+            ;;
+            [Gg][Pp][Ss]*) # gps
+                toggle_driver_ "uvcvideo" "Gps"
+            ;;
+        esac
+    done
+    unset -f toggle_driver_
+}
+
 ### Lauch steam with Nvidia
 function Steam() {
     DRI_PRIME=1 __NV_PRIME_RENDER_OFFLOAD=1 __VK_LAYER_NV_optimus=NVIDIA_only __GLX_VENDOR_LIBRARY_NAME=nvidia steam
 }
+
+### Run with nvidia
+function nvidia() {
+    local binary=("$1"); shift
+    local -a args=("$@")
+
+    if [[ -z "${binary}" ]];then
+        LOG error "No game binary?"
+        return 1
+    fi
+
+    if ! command -v ${binary} &> /dev/null;then
+        binary=("./${binary[@]}")
+    fi
+
+    local vulkan_icd_path=${VK_ICD_FILENAMES:-"/usr/share/vulkan/icd.d/nvidia_icd.json"}
+    local vk_optimus_layer=${__VK_LAYER_NV_optimus:-"NVIDIA_only"}
+    local glx_vendor_name=${__GLX_VENDOR_LIBRARY_NAME:-"nvidia"}
+    local -i prime_render_offload=${__NV_PRIME_RENDER_OFFLOAD:-1}
+    local -i dxvk_hud_setting=${DXVK_HUD:-1}
+    local -i mangohud_enabled=${MANGOHUD:-1}
+
+    local -a environment_variables=(
+        VK_ICD_FILENAMES=${vulkan_icd_path}
+        __VK_LAYER_NV_optimus=${vk_optimus_layer}
+        __GLX_VENDOR_LIBRARY_NAME=${glx_vendor_name}
+        __NV_PRIME_RENDER_OFFLOAD=${prime_render_offload}
+        DXVK_HUD=${dxvk_hud_setting}
+        MANGOHUD=${mangohud_enabled}
+    )
+
+    # Run the main executable
+    exec env "${environment_variables[@]}" "${binary[@]}" "${args[@]}"
+
+}; alias nvrun="nvidia"
 
 ### Man but cool man
 function man() {
     local args=($@)
     /usr/bin/man ${args[@]} | /usr/bin/bat --decorations=never --color=always --language=markdown 2> /dev/null
 }
+
