@@ -88,19 +88,19 @@ echo -e "\n##############    Installing dependencies for Sway config...    #####
 Install "Installing Core Wayland + Sway tools" sway swaylock swayidle foot waybar xdg-utils
 
 # Utilities
-Install "Installing extra Utilities" grim slurp wf-recorder brightnessctl playerctl libnotify
+Install "Installing extra Utilities" grim slurp wf-recorder brightnessctl playerctl libnotify bc
 
 # Audio & Volume
 Install "Installing Audio & Volume" pipewire pipewire-pulse pavucontrol mpv mpv-mpris ffmpeg
 
 # File manager & terminal
-Install "Installing File manager & terminal" dolphin konsole foot
+Install "Installing File manager & terminal" dolphin konsole foot alacritty
 
 # System monitor
 Install "Installing System monitor" htop btop atop ctop plasma-systemmonitor
 
 # Rofi/Wofi launchers
-Install "Installing Rofi/Wofi launchers" rofi wofi rofi-emoji
+Install "Installing Rofi/Wofi launchers" rofi fuzzel wofi rofi-emoji
 
 # Browsers
 Install "Installing Browsers" qutebrowser

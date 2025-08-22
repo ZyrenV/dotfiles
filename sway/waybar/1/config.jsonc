@@ -229,7 +229,7 @@
         "tooltip-format": "SSID: {essid}\nIP: {ipaddr}\nSpeed:  {bandwidthDownBits}  {bandwidthUpBits}\nStrength: {signalStrength}%",
         "tooltip-format-ethernet": "{ifname} 󰌘",
         "tooltip-format-disconnected": "󰌙 Disconnected",
-        "on-click-right": "foot -a 'Floating' -w 1045x600 bash -c 'RESULT=$(nmcli -colors=yes device wifi list); echo \"${RESULT}\"; read -r -n 1 -s'",
+        "on-click-right": "foot -a 'Floating' -w 1045x600 bash -c 'RESULT=$(nmcli -colors=yes device wifi list --rescan yes); echo \"${RESULT}\"; read -r -n 1 -s'",
         "on-double-middle": "notify-send -t 1000 'Double click'",
         "on-scroll-up": "[[ $(nmcli radio wifi) == disabled ]] && nmcli radio wifi on && notify-send -t 1000 'Wifi turned on'",
         "on-scroll-down": "[[ $(nmcli radio wifi) == enabled ]] && nmcli radio wifi off && notify-send -t 1000 'Wifi turned off'"

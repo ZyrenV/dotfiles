@@ -41,15 +41,15 @@ font pango: SourceCodePro Large 4
         pointer_constraint enable
     }
 
-    #* Any Keyboard
+    #* All Keyboards
     input type:keyboard {
         xkb_layout us,es,ru
         repeat_delay 160
         repeat_rate 60
     }
 
-    #* Optical Mouse
-    input 12538:768:USB_Optical_Mouse {
+    #* All Pointer devices
+    input type:pointer {
         natural_scroll disabled
         dwt enabled
         accel_profile adaptive
@@ -57,7 +57,7 @@ font pango: SourceCodePro Large 4
         pointer_accel 1
     }
 
-    #* Any Trackpad
+    #* All Trackpads
     input type:touchpad {
         accel_profile adaptive   # trackpad acceleration
         click_method clickfinger # Clickfinger
@@ -85,6 +85,7 @@ font pango: SourceCodePro Large 4
 ### My Application launcher ###
     set $menu_wofi wofi -W 40% -H 32% --gtk-dark --allow-images --config ${HOME}/.config/wofi/wofi.conf --allow-markup --hide-scroll --prompt="Search" --show drun
     set $menu_rofi rofi -show-icons -font Hack -theme material -show drun
+    set $fuzzel fuzzel --background="#333333FA" --text-color="#BBBBBBFF" --width=60 --lines=10 --prompt="Search: "
 
 
 ### Auto Start ###
@@ -100,12 +101,16 @@ font pango: SourceCodePro Large 4
     exec --no-startup-id /usr/lib/xdg-desktop-portal-wlr &
     exec --no-startup-id /usr/lib/xdg-desktop-portal -r
 
-    exec_always --no-startup-id bash -c 'sock="${XDG_RUNTIME_DIR}/foot${WAYLAND_DISPLAY/#/-}.sock"; [[ -S "${sock}" ]] || foot --server=${sock}'
-    exec_always --no-startup-id ${HOME}/.bin/NowPlaying
-    exec_always --no-startup-id pkill -x swayidle; swayidle -w \
+    # swayidle for lockscreen
+    exec_always --no-startup-id swayidle -w \
             timeout 100 "${HOME}/.config/sway/lock_screen/lock.sh" \
             resume "swaymsg 'output * power on'" \
             before-sleep "${HOME}/.config/sway/lock_screen/lock.sh set_bg"
+    # Only most recent swayidle process
+    exec_always --no-startup-id bash -c 'ID="$(pgrep -f swayidle)"; [[ ${#ID} -le 10 ]] || echo "$ID" | grep -v "$(echo "$ID" | tail -n 2)" | xargs -x kill'
+
+    exec_always --no-startup-id bash -c 'sock="${XDG_RUNTIME_DIR}/foot${WAYLAND_DISPLAY/#/-}.sock"; [[ -S "${sock}" ]] || foot --server=${sock}'
+    exec_always --no-startup-id ${HOME}/.bin/NowPlaying
 
 ### Window rules ###
     # Set opacity for all windows
@@ -119,14 +124,16 @@ font pango: SourceCodePro Large 4
         for_window [class=".*"] default_floating_border pixel 1
     # Transparancy levels for applications
         for_window [app_id="^(foot)$"] opacity 0.97
-        for_window [app_id="^(waterfox|kitty)$"] opacity 1
+        for_window [app_id="^(kitty)$"] opacity 1
     # Any App Id with 'Floating', floating
         for_window [app_id="^(Floating|Float|floating|float)$"] floating enable, move position center
     # Enabele floating don't tile
-        for_window [app_id="^(waterfox|com.rtosta.zapzap|org.pulseaudio.pavucontrol|pavucontrol|com.github.wwmm.easyeffects)$"] floating enable
+        for_window [app_id="^(com.rtosta.zapzap|org.pulseaudio.pavucontrol|pavucontrol|com.github.wwmm.easyeffects)$"] floating enable
+        for_window [app_id="^waterfox*"] floating enable
         for_window [app_id="^(org.kde.dolphin|org.kde.plasma-systemmonitor|blueman-manager|org.kde.konsole)$"] floating enable
         for_window [app_id="^(org.kde.okular|org.qutebrowser.qutebrowser|org.kde.kclock$)$"] floating enable
         for_window [class="^(Brave-browser|ZapZap|discord|qutebrowser)$"] floating enable
+        for_window [app_id="^blender*"] floating enable
 
     # <outer-border-color> <frame-color> <title-text-color> <next-tiling-indicator-color>
         client.focused #333333 #6600AA #DDDDDD #6600AA
@@ -167,7 +174,7 @@ font pango: SourceCodePro Large 4
 
     #* Cycle next workspace *#
         # Focus the next window (one-directional)
-        bindsym $mod+Tab exec bash -c 'swaymsg focus right || swaymsg focus down || swaymsg focus up || swaymsg focus left || swaymsg workspace next'
+        bindsym $mod+Tab       exec bash -c 'swaymsg focus right || swaymsg focus down || swaymsg focus up || swaymsg focus left || swaymsg workspace next'
         # Focus the previous window (one-directional)
         bindsym $mod+Shift+Tab exec bash -c 'swaymsg focus left || swaymsg focus up || swaymsg focus down || swaymsg focus right || swaymsg workspace prev'
 
@@ -184,55 +191,86 @@ font pango: SourceCodePro Large 4
 
     #* Special keys to adjust volume via PulseAudio *#
         bindsym {
-            XF86AudioMute exec pactl set-sink-mute \@DEFAULT_SINK@ toggle
-            XF86AudioLowerVolume exec pactl set-sink-volume \@DEFAULT_SINK@ -5%
-            XF86AudioRaiseVolume exec pactl set-sink-volume \@DEFAULT_SINK@ +5%
-            XF86AudioMicMute exec pactl set-source-mute \@DEFAULT_SOURCE@ toggle
+            XF86AudioMute           exec pactl set-sink-mute @DEFAULT_SINK@ toggle
+            XF86AudioMicMute        exec pactl set-source-mute @DEFAULT_SOURCE@ toggle
+            XF86AudioLowerVolume    exec pactl set-sink-volume @DEFAULT_SINK@ -5%
+            XF86AudioRaiseVolume    exec pactl set-sink-volume @DEFAULT_SINK@ +5%
         }
 
     #* Special keys to adjust brightness via brightnessctl *#
         bindsym {
-            XF86MonBrightnessDown exec brightnessctl set 5%-
-            XF86MonBrightnessUp exec brightnessctl set 5%+
+            XF86MonBrightnessDown   exec brightnessctl set 5%-
+            XF86MonBrightnessUp     exec brightnessctl set 5%+
         }
+
+    # Audio-Video controls (playerctl)
+        # Play-pause
+            bindsym F9                  exec playerctl play-pause
+            bindsym $mod+Up             exec playerctl play-pause
+
+        # Mute sink (output)
+            bindsym $mod+Down           exec pactl set-sink-mute @DEFAULT_SINK@ toggle
+
+        # Seek backward
+            bindsym $mod+Ctrl+Left      exec playerctl position $( awk '{ print $1 - (5)  }' <<< $(playerctl position) )
+            bindsym $mod+Left           exec playerctl position $( awk '{ print $1 - (10) }' <<< $(playerctl position) )
+            bindsym $mod+Shift+Left     exec playerctl position $( awk '{ print $1 - (40) }' <<< $(playerctl position) )
+        # Seek forward
+            bindsym $mod+Ctrl+Right     exec playerctl position $( awk '{ print $1 + (5)  }' <<< $(playerctl position) )
+            bindsym $mod+Right          exec playerctl position $( awk '{ print $1 + (10) }' <<< $(playerctl position) )
+            bindsym $mod+Shift+Right    exec playerctl position $( awk '{ print $1 + (40) }' <<< $(playerctl position) )
+
+        # Volume controls
+            # Volume up
+            bindsym $mod+Ctrl+Up        exec playerctl volume $( awk '{ print $1 + 1/20 }' <<< $(playerctl volume) )
+            # Volume down
+            bindsym $mod+Ctrl+Down      exec playerctl volume $( awk '{ print $1 - 1/20 }' <<< $(playerctl volume) )
+
+        # Play previous
+            bindsym F8                  exec playerctl previous
+            bindsym $mod+Shift+Up       exec playerctl previous
+
+        # Play next
+            bindsym F10                 exec playerctl next
+            bindsym $mod+Shift+Down     exec playerctl next
 
     #* Move your focus around, mode: VIM (hjkl) *#
         bindsym {
-            $mod+$left focus left
-            $mod+$down focus down
-            $mod+$up focus up
+            $mod+$left  focus left
+            $mod+$down  focus down
+            $mod+$up    focus up
             $mod+$right focus right
         }
 
     #* Move the focused window in floating mode, modes: VIM (hjkl) or arrow keys *#
         bindsym {
-            $mod+Shift+$left move left
-            $mod+Shift+Left move left
-            $mod+Shift+$down move down
-            $mod+Shift+Down move down
-            $mod+Shift+$up move up
-            $mod+Shift+Up move up
-            $mod+Shift+$right move right
-            $mod+Shift+Right move right
+            $mod+Shift+$left    move left
+            $mod+Shift+$down    move down
+            $mod+Shift+$up      move up
+            $mod+Shift+$right   move right
+            # $mod+Shift+Left move left
+            # $mod+Shift+Down move down
+            # $mod+Shift+Up move up
+            # $mod+Shift+Right move right
         }
 
     #* Resizing containers *#
         bindsym $mod+r mode resize
         mode resize {
-            bindsym $up resize shrink height 14px
-            bindsym $down resize grow height 14px
-            bindsym $left resize shrink width 14px
-            bindsym $right resize grow width 14px
+            bindsym $up     resize shrink height 14px
+            bindsym $down   resize grow height 14px
+            bindsym $left   resize shrink width 14px
+            bindsym $right  resize grow width 14px
 
             bindsym Return mode default
             bindsym Escape mode default
         }
 
         bindsym {
-            $mod+Ctrl+$up resize shrink height 14px
-            $mod+Ctrl+$down resize grow height 14px
-            $mod+Ctrl+$left resize shrink width 14px
-            $mod+Ctrl+$right resize grow width 14px
+            $mod+Ctrl+$up       resize shrink height 14px
+            $mod+Ctrl+$down     resize grow height 14px
+            $mod+Ctrl+$left     resize shrink width 14px
+            $mod+Ctrl+$right    resize grow width 14px
         }
 
     #* Layout stuff *#
@@ -284,15 +322,18 @@ font pango: SourceCodePro Large 4
 
         # Bring my Text-fu terminal
             bindsym $mod+Return exec footclient
-            bindsym $mod+Shift+Return exec alacritty
-            bindsym $mod+Alt+Return exec kitty
+            bindsym $mod+Shift+Return exec footclient bash -c \
+                'tmux attach-session 2> /dev/null || tmux new-session -t dev'
+            bindsym $mod+Alt+Return exec alacritty
 
         # Good File Managers
-            bindsym Alt+E exec env XDG_CURRENT_DESKTOP=kde GTK_THEME=Adwaita:dark QT_QPA_PLATFORMTHEME=qt6ct dolphin
+            bindsym Alt+E exec env XDG_CURRENT_DESKTOP=kde QT_QPA_PLATFORMTHEME=qt6ct dolphin
             bindsym $mod+E exec env XDG_CURRENT_DESKTOP=kde nautilus
-        # Lauch wofi, my friend who fetches all the applications for me
-            bindsym Alt+Space exec $menu_wofi
+        # Lauch wofi
+            bindsym Alt+Space exec $fuzzel
             bindsym Alt+Shift+Space exec $menu_rofi
+        # Lauch fuzzel
+            bindsym $mod+D exec $menu_wofi
 
     #* Kill the focused windows *#
         bindsym $mod+q kill
@@ -319,8 +360,9 @@ font pango: SourceCodePro Large 4
                     '$(DIR="${HOME}/Grim_Screenshots"; [[ ! -d "${DIR}" ]] && mkdir -p "${DIR}"; grim -g "$(slurp)" "${DIR}/$(date +%d-%b-%Y_%H:%M:%S).png")'
 
         # Edit this (sway config) with neovim or vim
-            bindsym $mod+Shift+I exec bash -c \
-                'CONF=${HOME}/.config/sway/config; command -v nvim && EDIT=nvim || EDIT=vim; foot ${EDIT} ${CONF}'
+            bindsym $mod+I exec bash -c \
+                'CONF=${HOME}/.config/sway/config; \
+                    foot nvim ${CONF}'
 
         # Shutdown (Mod+Alt+Shift+P)
             bindsym $mod+Alt+Shift+P exec bash -c \
@@ -354,6 +396,9 @@ font pango: SourceCodePro Large 4
             bindsym $mod+grave+V exec bash -c \
                 '$(rofi -modi emoji -show emoji)'
 
+        # Temporary thought dumping
+            bindsym $mod+Shift+T exec foot bash -c 'temp_edit_file="$(mktemp -t temp_edit.XXXX)"; trap "rm -f ${temp_edit_file}" SIGKILL SIGINT; command -v nvim &> /dev/null && EDITOR="nvim" || EDITOR="vim"; ${EDITOR} "${temp_edit_file}"; wl-copy < "${temp_edit_file}"; rm -f "${temp_edit_file}"'
+
     #* System monitors *#
         # htop
         bindsym Ctrl+Shift+Escape exec bash -c \
@@ -370,7 +415,7 @@ font pango: SourceCodePro Large 4
 
     #* Scripts *#
         # An application launcher
-            bindsym F10 exec bash -c 'FILE="${HOME}/.config/sway/waybar/toggle_theme.sh"; pgrep -f "${FILE}" || "${FILE}"; pkill -x waybar; pkill -SIGUSR1 -f ${FILE}'
+            bindsym Shift+F10 exec bash -c 'FILE="${HOME}/.config/sway/waybar/toggle_theme.sh"; pgrep -f "${FILE}" || "${FILE}"; pkill -x waybar; pkill -SIGUSR1 -f ${FILE}'
             bindsym $mod+F10 exec pkill -f "toggle_theme.sh"; pkill -f '.*bin/waybar'
 
         # Create cava windows to look cool

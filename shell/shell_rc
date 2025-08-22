@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# vim:filetype=bash
+
 
 THIS_FILE="$0"
 
@@ -41,82 +43,114 @@ fi
 ### Global variables
 export HOSTNAME="$(cat /etc/hostname)"
 export LANG=en_US.UTF-8
-export WINEPREFIX="${HOME}/wine"
-export HISTFILE="/tmp/histfile_${USER}"
+export WINEPREFIX="$HOME/wine"
+export HISTFILE="/tmp/histfile_$USER"
 export EDITOR="nvim"
 export BREW="/home/linuxbrew/.linuxbrew"
 export PATH="/usr/bin"
+export MEDIA="/run/media/$USER"
+export XDG_DATA_HOME="$HOME/local/share"
+export HOME="${HOME:-"$(echo ~)"}"
 
-### Necessary Aliases
-alias ip="ip --color=auto"
+# Ls/Directory listing commands alias
 alias LS="eza --color=always --icons=always --octal-permissions --binary --across"
-alias l="eza --long --color=always --icons=always --group --octal-permissions --binary --across --sort=created --reverse"
-alias LA="eza --color=always --icons=always --group --octal-permissions --binary --across --almost-all"
 alias LL="eza --long --color=always --icons=always --sort=created --group --long --header --classify=always --octal-permissions --binary --across --total-size"
+alias LA="eza --color=always --icons=always --group --octal-permissions --binary --across --almost-all"
 alias lll="eza --long --color=always --icons=always --group --numeric --long --header --classify=always --octal-permissions --binary --across --total-size"
+alias l="eza --long --color=always --icons=always --group --octal-permissions --binary --across --sort=created --reverse"
 alias ls="lsd --color=always --git --icon=always --group-dirs=first --classify 2> /dev/null"
 alias ll="lsd --long --color=always --git --icon=always --group-dirs=first --classify --permission octal --total-size 2> /dev/null"
 alias la="lsd --color=always --git --all --icon=always --group-dirs=first --classify --permission octal --total-size 2> /dev/null"
-alias mv="mv --verbose"
-alias diff="diff --color=auto"
-alias cp="LOG error '${RED}Use rsync MF${NC}'; return 1 &> /dev/null"
-alias grep="grep --color=always"
-alias dir="dir --color=always"
-alias ncdu="ncdu --color dark"
-alias qemu="qemu-system-x86_64"
-alias sway="env WLR_RENDERER=vulkan sway &> /tmp/sway.log"
-alias VimBeGood="clear; docker run -it --rm brandoncc/vim-be-good:stable && echo && clear"
-alias sourceme="source ~/.zshrc.pre-oh-my-zsh"
-alias zshrc="vim ~/.zshrc"
-alias vimrc="vim ~/.vimrc"
-alias nvimrc="nvim ~/.config/nvim/init.vim"
-alias gtypistH="gtypist --personal-best --max-error=1.8 --no-welcome-screen --term-cursor --word-processor --always-sure"
-alias useless_pkg="pacman -Qtdq"
-alias cleancache="(paru -Scc || yay -Scc ) && sudo pacman -Scc"
-alias clearcache="(paru -Scc || yay -Scc ) && sudo pacman -Scc"
-alias weather="curl wttr.in/24.5800,80.8369"
-alias nvtop="nvtop --delay 2"
-alias gs="git status"
-alias Fonts="fc-list | awk -F':' '{print $1}' | awk -F'/' '{print $6}' | awk -F'.' '{print $1}' | sort -u"
-alias swayconfig="${EDITOR} ${HOME}/.config/sway/config"
-alias waybarconfig="nvim ${HOME}/.config/waybar/"
-alias NULL="/dev/null"
-alias M="${HOME}/Music"
-alias n="nvim"
-alias v="vim"
-alias colorchoser="exec env QT_QPA_PLATFORMTHEME=qt6ct kcolorchooser 2> /dev/null &; disown ; exit"
-alias getcolors="exec env QT_QPA_PLATFORMTHEME=qt6ct kcolorchooser 2> /dev/null &; disown"
-alias mpv="mpv --vid=auto --vo=gpu-next --hwdec=vulkan --hdr-compute-peak --volume=64"
-alias Vireon="cd ${HOME}/DEV/VIreon && ssh-add ${HOME}/.ssh/id_ed25519_rustlog"
-alias radeontop="radeontop --color"
-alias exiftool="/usr/bin/vendor_perl/exiftool"
-alias metadata="/usr/bin/vendor_perl/exiftool"
-alias qutebrowser="QT_QPA_PLATFORM=xcb QT_WEBENGINE_DISABLE_GPU=1 qutebrowser "$@""
-alias clear_systemd_journal_logs="sudo journalctl --rotate && sudo journalctl --vacuum-size=1K && sudo journalctl --vacuum-time=1s"
 alias lsblk="lsblk --paths -o+SIZE --fs"
-alias Dmesg="dmesg --color=always | less"
+
+# File operations alias
+alias mv="mv --verbose"
+alias cp="LOG error '\${RED}Use rsync MF\${NC}'; return 1 &> /dev/null"
 alias Cat="/usr/bin/bat --theme-dark=TwoDark --color=always --paging=always --decorations=never"
 
-### Random aliasing
+# Navigation/cd aliases
+_CD_DIRS="mkdir -p \${dir} && cd \${dir}; unset dir"
+alias M="dir=\${HOME}/Music && ${_CD_DIRS}"
+alias V="dir=\${HOME}/Videos && ${_CD_DIRS}"
+alias D="dir=\${HOME}/Downloads && ${_CD_DIRS}"
+alias L="dir=\${HOME}/LearnDir && ${_CD_DIRS}"
+alias d="dir=\${HOME}/dev && ${_CD_DIRS}"
+alias media="/run/media/\${USER}"
+unset _CD_DIRS
+
+# Git aliases
+alias gs="git status"
+
+# Config file editing aliases
+_EDIT_STUFF="\${EDITOR:-vim} \"\${config}\"; unset config"
+alias zshrc="config=\$HOME/.zshrc && ${_EDIT_STUFF}"
+alias vimrc="config=\$HOME/.vimrc && ${_EDIT_STUFF}"
+alias nvimrc="config=\$HOME/.config/nvim/init.vim && ${_EDIT_STUFF}"
+alias swayconfig="config=\${HOME}/.config/sway/config && ${_EDIT_STUFF}"
+alias waybarconfig="config_dir=\${HOME}/.config/waybar && \${EDITOR:-vim} \"\${config_dir}\"; unset config_dir"
+unset _EDIT_STUFF
+
+# Package manager aliases
+alias useless_pkg="pacman -Qtdq"
+alias clean_cache="(paru -Scc || yay -Scc ) && sudo pacman -Scc"
+alias clear_cache="(paru -Scc || yay -Scc ) && sudo pacman -Scc"
+
+# System monitoring aliases
+alias nvtop="nvtop --delay 2"
+alias radeontop="radeontop --color"
+alias Dmesg="dmesg --color=always | less"
+alias watch="watch --no-title"
+alias systemmonitor="XDG_CURRENT_DESKTOP=KDE GTK_THEME=Adwaita:dark QT_QPA_PLATFORMTHEME=gtk plasma-systemmonitor"
+
+# Network/IP aliases
+alias ip="ip --color=auto"
+alias weather="curl wttr.in/24.5800,80.8369"
+
+# Application/tool aliases
+alias ncdu="ncdu --color dark"
+alias qemu="qemu-system-x86_64"
+alias sway="env WLR_RENDERER=vulkan sway"
+alias VimBeGood="clear; docker run -it --rm brandoncc/vim-be-good:stable && echo && clear"
+alias gtypistH="gtypist --personal-best --max-error=1.8 --no-welcome-screen --term-cursor --word-processor --always-sure"
+alias mpv="mpv --vid=auto --vo=gpu-next --hwdec=vulkan --hdr-compute-peak --volume=64"
+alias qutebrowser="QT_QPA_PLATFORM=xcb QT_WEBENGINE_DISABLE_GPU=1 qutebrowser"
+alias colorchoser="env QT_QPA_PLATFORMTHEME=qt6ct kcolorchooser 2> /dev/null & disown"
+alias getcolors="env QT_QPA_PLATFORMTHEME=qt6ct kcolorchooser 2> /dev/null & disown"
+
+# Metadata/file info aliases
+alias exiftool="/usr/bin/vendor_perl/exiftool"
+alias metadata="/usr/bin/vendor_perl/exiftool"
+alias Fonts="fc-list : file | sed 's|.*/||' | sed 's/\.[^.]*$//' | sort -u"
+
+# System/log management aliases
+alias clear_systemd_journal_logs="sudo journalctl --rotate && sudo journalctl --vacuum-size=1K && sudo journalctl --vacuum-time=1s"
+alias sourceme="source ~/.zshrc"
+alias savehist="file=$HOME/.saved_shell_history && cat \$HISTFILE >> \${file} && unset file"
+
+# Flatpak application aliases
+_FP_RUN="flatpak run \"\${fp_name}\" || flatpak install \"\${fp_name}\" -y"
+alias fp-scrivano="fp_name=com.github.scrivanolabs.scrivano; ${_FP_RUN}; unset fp_name"
+alias fp-draw="fp_name=com.github.scrivanolabs.scrivano; ${_FP_RUN}; unset fp_name"
+alias fp-tipp10="fp_name=com.gitlab.tipp10.tipp10; ${_FP_RUN}; unset fp_name"
+alias fp-ktouch="fp_name=org.kde.ktouch; ${_FP_RUN}; unset fp_name"
+alias fp-typing="fp_name=org.kde.ktouch; ${_FP_RUN}; unset fp_name"
+alias fp-easyeffects="fp_name=com.github.wwmm.easyeffects; ${_FP_RUN}; unset fp_name"
+alias fp-effects="fp_name=com.github.wwmm.easyeffects; ${_FP_RUN}; unset fp_name"
+alias fp-zen="fp_name=app.zen_browser.zen; ${_FP_RUN}; unset fp_name"
+alias fp-pomodoro="fp_name=org.jousse.vincent.Pomodorolm; ${_FP_RUN}; unset fp_name"
+alias fp-pomodorolm="fp_name=org.jousse.vincent.Pomodorolm; ${_FP_RUN}; unset fp_name"
+alias fp-discord="fp_name=com.discordapp.Discord; ${_FP_RUN}; unset fp_name"
+alias fp-VideoEditor="fp_name=org.kde.kdenlive; ${_FP_RUN}; unset fp_name"
+alias fp-calculator="fp_name=io.github.Qalculate.qalculate-qt; ${_FP_RUN}; unset fp_name"
+alias fp-qcal="fp_name=io.github.Qalculate.qalculate-qt; ${_FP_RUN}; unset fp_name"
+unset _FP_RUN
+
+# Utility aliases
+alias NULL="/dev/null"
+
+# Typo/alternative language aliases
 alias сдуфк="clear"
 alias ды="ls"
-
-### Flatpak Applications
-alias fp-scrivano="flatpak run com.github.scrivanolabs.scrivano"
-alias fp-draw="flatpak run com.github.scrivanolabs.scrivano"
-alias fp-tipp10="flatpak run com.gitlab.tipp10.tipp10"
-alias fp-ktouch="flatpak run org.kde.ktouch"
-alias fp-typing="flatpak run org.kde.ktouch"
-alias fp-easyeffects="flatpak run com.github.wwmm.easyeffects"
-alias fp-effects="flatpak run com.github.wwmm.easyeffects"
-alias fp-zen="flatpak run app.zen_browser.zen"
-alias fp-pomodoro="flatpak run org.jousse.vincent.Pomodorolm"
-alias fp-pomodorolm="flatpak run org.jousse.vincent.Pomodorolm"
-alias fp-discord="flatpak run com.discordapp.Discord"
-alias fp-VideoEditor="flatpak run org.kde.kdenlive 2> /dev/null"
-alias fp-calculator="flatpak run io.github.Qalculate.qalculate-qt"
-alias fp-qcal="flatpak run io.github.Qalculate.qalculate-qt"
-alias fp-systemmonitor="XDG_CURRENT_DESKTOP=KDE GTK_THEME=Adwaita:dark QT_QPA_PLATFORMTHEME=gtk plasma-systemmonitor"
 
 ### Determine package manager
 function PackageManager() {
@@ -197,7 +231,7 @@ function RotTransform() {
 
     if [[ "${operation_type}" == "encode" ]]; then
         operation=("${Enc[@]}")
-    else
+    elif [[ "${operation_type}" == "decode" ]]; then
         operation=("${Dec[@]}")
     fi
 
@@ -503,7 +537,8 @@ function Compile() {
     local -a args=("$@")
     local -a files=()
     local -a cmd_flags=() c_sources=() cpp_sources=()
-    local arg="" out_="" output="main___" CC_="gcc"
+    local arg="" out_="" output="main__" CC_="gcc"
+    local output_type="captured"
     local -i remove_output=0 debug=0
 
     arg=""; for ((i=0; i < ${#args[@]}; i++ )); do
@@ -520,12 +555,15 @@ function Compile() {
                     output="${arg#*=}"
                     [[ -z "${output}" ]] && output="main___"
                     ;;
-                -clang|--clang)
+                -*clang)
                     CC_="clang"
                     ;;
-                -clang=*|--clang=*)
+                -*clang=*)
                     CC_="${arg#*=}"
                     [[ -z "${CC_}" ]] && CC_="gcc"
+                    ;;
+                -*def*)
+                    output_type="default"
                     ;;
                 *)
                     LOG error "Invalid flag: '${arg}'"
@@ -552,18 +590,26 @@ function Compile() {
     done
 
     if [[ ${#cpp_sources[@]} > 0 ]]; then
-        cmd_flags=()
-        cmd_flags+=( "-x" "c++" "-std=c++20" )
-        cmd_flags+=( "-lstdc++" )
-        cmd_flags+=( "-pedantic" "-Wall" "-Wextra" "-Werror" )
+        cmd_flags=( "-x" "c++" "-std=c++20" )
+        cmd_flags+=( "-lstdc++" "-lm" )
+        cmd_flags+=( "-pedantic" "-Wall" "-Wextra" "-Werror" "-fno-elide-constructors" )
         [[ $debug -eq 1 ]] && cmd_flags+=( "-DDEBUG" )
-        cmd_flags+=( "-fno-elide-constructors" )
 
         LOG info "$CC_ ${cmd_flags[*]} ${cpp_sources[*]} -o ${output}"
         $CC_ "${cmd_flags[@]}" "${cpp_sources[@]}" -o "${output}"
+        if [[ $? -ne 0 ]]; then
+            LOG error "Compilation failed"
+            return 1
+        fi
         LOG info "Running: ${output}: "
+
+        if [[ "${output_type}" != "captured" ]]; then
+            ./"${output}"
+            return $?
+        fi
+
         local lines out_
-        if ! out_="$(./${output})"; then
+        if ! out_="$(./"${output}")"; then
             LOG error "Execution failed"
         fi
 
@@ -584,16 +630,26 @@ function Compile() {
     fi
 
     if [[ ${#c_sources[@]} > 0 ]]; then
-        cmd_flags=()
-        cmd_flags+=( "-lstdc++" )
+        cmd_flags=( "-x" "c" "-std=c99" )
+        cmd_flags+=( "-lstdc++" "-lm" )
         cmd_flags+=( "-pedantic" "-Wall" "-Wextra" "-Werror" )
         [[ $debug -eq 1 ]] && cmd_flags+=( "-DDEBUG" )
 
         LOG info "$CC_ ${cmd_flags[*]} ${c_sources[*]} -o ${output}"
         $CC_ "${cmd_flags[@]}" "${c_sources[@]}" -o "${output}"
+        if [[ $? -ne 0 ]]; then
+            LOG error "Compilation failed"
+            return 1
+        fi
         LOG info "Running: ${output}: "
+
+        if [[ "${output_type}" != "captured" ]]; then
+            ./"${output}"
+            return $?
+        fi
+
         local lines out_
-        if ! out_="$(./${output})"; then
+        if ! out_="$(./"${output}")"; then
             LOG error "Execution failed"
         fi
 
@@ -653,8 +709,8 @@ function sway_vulkan() {
 }
 
 ### Set the path with default locations
-function setPath() {
-    PATH+=: PATH+="/usr/local/bin:/usr/local/sbin:/usr/sbin:/sbin:/bin"
+function SetPath() {
+    PATH+=: PATH+="/usr/sbin:/sbin:/bin:/usr/local/bin:/usr/local/sbin"
     PATH+=: PATH+="${HOME}/.bin:${HOME}/.local/bin"
     PATH+=: PATH+="${HOME}/.cargo/bin:${HOME}/.npm_global/bin:${BREW}/bin"
 
@@ -662,13 +718,13 @@ function setPath() {
     if [[ ! -s "${tmp_path}" ]] ;then
         echo "$PATH" &> "${tmp_path}"
     else
-        PATH="$(cat ${tmp_path})"
+        PATH="$(cat "${tmp_path}")"
         export PATH
     fi
 }
 
 ### Show all the paths in $PATH
-function Paths() {
+function ShowPath() {
     [[ -n $ZSH_VERSION ]] && emulate -LR bash
     local IFS=$':' i=0
     for path in $PATH; do
@@ -678,13 +734,13 @@ function Paths() {
 }; alias show_path="Paths"; alias print_path="Paths"
 
 ### Start SSH agent on initial login
-function SSHAgent() {
+function SSH_Agent() {
     local ssh_agent="/tmp/.ssh_agent"
     if [[ ! -s "${ssh_agent}" ]]; then
         touch "${ssh_agent}"
         echo "$(ssh-agent -s)" > "${ssh_agent}"
     else
-        source ${ssh_agent} &> /dev/null
+        source "${ssh_agent}" &> /dev/null
     fi
 }
 
@@ -749,7 +805,7 @@ function gpt() {
     esac
 }; alias devgpt='gpt dev'; alias gptimg='gpt img'
 
-### Pretty cat with colors
+### Pretty `cat` like command with colors
 function catbat() {
     local -a args=("$@")
     local -a batargs=()
@@ -764,14 +820,36 @@ function catbat() {
         esac
     done
     /usr/bin/bat --theme-dark=TwoDark --color=always --decorations=never --paging=never "${batargs[@]}"
+}; alias Cat="catbat"
+
+### Pretty `less` like command with colors
+function Less() {
+    local -a args=("$@")
+    local -a batargs=()
+    for arg in "${args[@]}"; do
+        case "${arg}" in
+            *.conf)
+                batargs+=("--language=ini" "${arg}")
+                ;;
+            *)
+                batargs+=("${arg}")
+                ;;
+        esac
+    done
+    /usr/bin/bat --theme-dark=TwoDark --color=always --decorations=never --paging=always "${batargs[@]}"
 }
 
 ### Temporay writing
 function t() {
-    local TEMP_FILE="$(mktemp -t TEMP_WRITE_DUMP.XXXX)"
-    "${EDITOR}" "${TEMP_FILE}";
-    cat "${TEMP_FILE}"
-    rm "${TEMP_FILE}"
+    local temp_file="$(mktemp -t temp_edit_.XXXX)"
+    local session_type=""
+    "${EDITOR}" "${temp_file}"
+    if [[ "${XDG_SESSION_TYPE}" == wayland ]]; then
+        wl-copy < "${temp_file}" && LOG info "Wayland copy"
+    elif [[ "${XDG_SESSION_TYPE}" == x11 ]]; then
+        xsel < "${temp_file}" && LOG info "x11 copy"
+    fi
+    rm "${temp_file}"
 }
 
 ### Spanish lessons
@@ -857,6 +935,90 @@ function y() {
     rm -f -- "${tmp}"
 }
 
+# sysstat: lightweight stats (net + disk)
+sysstat() {
+    local iface="${1:-wlo1}"      # network iface (default wlo1)
+    local dev="${2:-nvme0n1}"     # block device (default nvme0n1)
+    local interval="${3:-1}"      # interval seconds
+    local iterations="${4:-1}"    # how many iterations (default 1, -1=infinite)
+
+    # --- paths ---
+    local rx_path="/sys/class/net/$iface/statistics/rx_bytes"
+    local tx_path="/sys/class/net/$iface/statistics/tx_bytes"
+    local stat_path="/sys/block/$dev/stat"
+    local st_dir="/sys/block/$dev/statistics"
+
+    [[ ! -e $rx_path ]] && { echo "No such iface: $iface"; return 1; }
+    [[ ! -e $stat_path ]] && { echo "No such block dev: $dev"; return 1; }
+
+    # --- helpers ---
+    human() {
+        local bytes=$1
+        if (( bytes > 1073741824 )); then
+            awk -v b=$bytes 'BEGIN{printf "%.2f GiB", b/1073741824}'
+        elif (( bytes > 1048576 )); then
+            awk -v b=$bytes 'BEGIN{printf "%.2f MiB", b/1048576}'
+        elif (( bytes > 1024 )); then
+            awk -v b=$bytes 'BEGIN{printf "%.2f KiB", b/1024}'
+        else
+            printf "%d B" "$bytes"
+        fi
+    }
+
+    get_disk_bytes() {
+        if [[ -r "$st_dir/read_bytes" && -r "$st_dir/write_bytes" ]]; then
+            # some block devices export these
+            local rd=$(<"$st_dir/read_bytes")
+            local wr=$(<"$st_dir/write_bytes")
+            echo "$rd $wr"
+        else
+            # fallback to parsing /stat
+            # field3=sectors_read, field7=sectors_written
+            awk '{print $3*512, $7*512}' "$stat_path"
+        fi
+    }
+
+    # one-shot totals
+    if (( iterations == 1 )); then
+        local rx=$(<"$rx_path") tx=$(<"$tx_path")
+        read -r rd wr < <(get_disk_bytes)
+
+        echo "Total Download: $(human $rx)"
+        echo "Total Upload:   $(human $tx)"
+        echo "Disk Read:      $(human $rd)"
+        echo "Disk Write:     $(human $wr)"
+        return 0
+    fi
+
+    # realtime mode
+    local prev_rx=$(<"$rx_path") prev_tx=$(<"$tx_path")
+    read -r prev_rd prev_wr < <(get_disk_bytes)
+
+    printf "\n"
+    while :; do
+        sleep "$interval"
+        local rx=$(<"$rx_path") tx=$(<"$tx_path")
+        read -r rd wr < <(get_disk_bytes)
+
+        local drx=$((rx - prev_rx))
+        local dtx=$((tx - prev_tx))
+        local drd=$((rd - prev_rd))
+        local dwr=$((wr - prev_wr))
+
+        printf "\033[1A\033[2K"
+        printf "%s | Net ↓ %s/s ↑ %s/s | Disk R %s/s W %s/s\n" \
+            "$(date +%T)" \
+            "$(human $drx)" \
+            "$(human $dtx)" \
+            "$(human $drd)" \
+            "$(human $dwr)"
+
+        prev_rx=$rx prev_tx=$tx prev_rd=$rd prev_wr=$wr
+        (( iterations > 0 )) && (( --iterations == 0 )) && break
+    done
+    unset -f get_disk_bytes human
+}
+
 ### Terminal file explorer with cd tracking
 function yc() {
     clear
@@ -882,10 +1044,17 @@ function Pretty_rename() {
     done
 }
 
+function start_docker() {
+    sudo -v
+    sudo containerd &> /dev/null & disown
+    sudo dockerd --host=unix:///var/run/docker.sock --containerd=/run/containerd/containerd.sock &> /dev/null & disown
+}; alias stop_docker="sudo pkill -f 'containerd|dockerd'"
+
 ### Set CPU frequencies to certain limits
 function SetPower() {
     local profile="$1"
     local -i stapm fast slow apuslow
+    local -i t=1000
 
     command -v ryzenadj &> /dev/null || {
         LOG error "'ryzenadj' not found, install it"
@@ -894,40 +1063,40 @@ function SetPower() {
 
     case "${profile}" in
         verylow|very-low)
-            stapm=5000 fast=5000 slow=5000 apuslow=5000
+            stapm=$((5*t)) fast=$((5*t)) slow=$((5*t)) apuslow=$((5*t))
             ;;
         low)
-            stapm=10000 fast=10000 slow=8000 apuslow=8000
+            stapm=$((10*t)) fast=$((10*t)) slow=$((8*t)) apuslow=$((8*t))
             ;;
         vibe|coding)
-            stapm=15000 fast=15000 slow=12000 apuslow=12000
+            stapm=$((15*t)) fast=$((15*t)) slow=$((12*t)) apuslow=$((12*t))
             ;;
         balanced)
-            stapm=25000 fast=25000 slow=20000 apuslow=20000
+            stapm=$((25*t)) fast=$((25*t)) slow=$((20*t)) apuslow=$((20*t))
             ;;
         high)
-            stapm=45000 fast=45000 slow=35000 apuslow=35000
+            stapm=$((45*t)) fast=$((45*t)) slow=$((35*t)) apuslow=$((35*t))
             ;;
         boost)
-            stapm=65000 fast=65000 slow=54000 apuslow=54000
+            stapm=$((65*t)) fast=$((65*t)) slow=$((54*t)) apuslow=$((54*t))
             ;;
         stock|default)
             LOG info "Your default stock values"
-            stapm=65000 fast=65000 slow=54000 apuslow=54000
+            stapm=$((65*t)) fast=$((65*t)) slow=$((54*t)) apuslow=$((54*t))
             sudo ryzenadj \
                 --stapm-limit=$stapm \
                 --fast-limit=$fast \
                 --slow-limit=$slow \
                 --apu-slow-limit=$apuslow \
-                --stapm-time=1000 \
-                --slow-time=5000 \
-                --vrm-current=58000 \
-                --vrmsoc-current=15000 \
-                --vrmmax-current=110000 \
-                --vrmsocmax-current=20000 \
-                --tctl-temp=100000 \
-                --apu-skin-temp=42000 \
-                --dgpu-skin-temp=51000 2> /dev/null
+                --stapm-time=$((1*t)) \
+                --slow-time=$((5*t)) \
+                --vrm-current=$((58*t)) \
+                --vrmsoc-current=$((15*t)) \
+                --vrmmax-current=$((110*t)) \
+                --vrmsocmax-current=$((20*t)) \
+                --tctl-temp=85 \
+                --apu-skin-temp=$((42*t)) \
+                --dgpu-skin-temp=$((51*t)) 2> /dev/null
             return 0
             ;;
 
@@ -941,17 +1110,13 @@ function SetPower() {
             ;;
     esac
     # Single call with dynamic values
-    sudo ryzenadj --stapm-limit=$stapm --fast-limit=$fast --slow-limit=$slow --apu-slow-limit=$apuslow 2> /dev/null
+    sudo ryzenadj --stapm-limit=$stapm --fast-limit=$fast --slow-limit=$slow --apu-slow-limit=$apuslow --tctl-temp=80 2> /dev/null
 }
 
 function browser() {
-    local firefox_profile="$1" browser
+    local firefox_profile_name="$1"
     local firefox_profile_dir="${HOME}/.profiles"
-
-    if ! [[ "${XDG_SESSION_DESKTOP}" == "sway" ]]; then
-        LOG error "You are not running sway"
-        return 1
-    fi
+    local profile="" browser=""
 
     if command -v waterfox &> /dev/null; then
         browser="waterfox"
@@ -965,20 +1130,45 @@ function browser() {
 
     mkdir -p "${firefox_profile_dir}"
 
-    if [[ "${firefox_profile}" != */* ]]; then
-        firefox_profile="${firefox_profile_dir}/${firefox_profile:-"dev"}"
+    if [[ "${firefox_profile_name}" != */* ]]; then
+        profile="${firefox_profile_dir}/${firefox_profile_name:-"dev"}"
     else
-        firefox_profile="${firefox_profile}"
+        profile="${firefox_profile_name}"
     fi
 
-    waterfox --profile "${firefox_profile}" &> /dev/null & disown
-    timeout --signal SIGKILL 6s bash -c "
-        while [[ \"\$(swaymsg -t get_tree -r | jq -r '.. | select(type == \"object\" and .app_id == \"${browser}\") | .app_id'; sleep 0.01)\" != \"${browser}\" ]]; do
-            sleep 0.01
-        done
-        sleep 0.2
-        swaymsg '[app_id=\"${Browser}\"] resize set width 1444 height 784'
-    "
+    LOG info "$browser --profile $(ColorPath "${profile}") &> /dev/null & disown"
+
+    $browser --profile "${profile}" &> /dev/null & disown
+
+    if [[ "${XDG_SESSION_DESKTOP}" == "sway" ]]; then
+        timeout --signal SIGKILL 6s bash -c "
+            while ! swaymsg -t get_tree -r | jq -e '.. | select(type == \"object\" and (.app_id? | type == \"string\" and test(\"^${browser}\")))' &> /dev/null; do
+                sleep 0.01
+            done
+            sleep 0.2
+            swaymsg '[app_id=\"${browser}\"] resize set width 1444 height 784'
+        "
+    fi
+    exit 0
+}
+
+psmem() {
+    if [[ -z "$1" ]]; then
+        echo "Please provide a process name or PID."
+        return 1
+    fi
+    awk '{
+        rss=$1/1024;
+        if (rss>=1024) {
+            gb=sprintf("%.2f GB", (rss/1024));
+            printf "%-20s %5s\n", gb, $2;
+        }
+        else {
+            mb=sprintf("%.2f MB", rss);
+            printf "%-20s %5s\n", mb, $2;
+        }
+
+    }' <(ps -o rss,comm -p $(pgrep -d, "$1")) | grep -v "0.00 MB"
 }
 
 ### Download any video
@@ -1002,9 +1192,13 @@ function Ip() {
 }
 
 ### Update grub
-function UpdateGrub() {
+function update-grub() {
     sudo grub-mkconfig -o /boot/grub/grub.cfg
+}
 
+### Run neovim with sudo
+function sudo_nvim() {
+  sudo env WAYLAND_DISPLAY=$WAYLAND_DISPLAY DISPLAY=$DISPLAY nvim "$@"
 }
 
 ### Sort by file size
@@ -1049,18 +1243,30 @@ function Steam() {
     DRI_PRIME=1 __NV_PRIME_RENDER_OFFLOAD=1 __VK_LAYER_NV_optimus=NVIDIA_only __GLX_VENDOR_LIBRARY_NAME=nvidia steam
 }
 
+function Font() {
+    local font_name="$1"
+    fc-list | grep -o -i "${font_name}.*\." | awk -F'.' '{ print $1 }' | tr '-' ' '
+}
+
 ### Run with nvidia
 function nvidia() {
-    local binary=("$1"); shift
+    local -a binary=("$1"); shift
     local -a args=("$@")
 
-    if [[ -z "${binary}" ]];then
-        LOG error "No game binary?"
+    if [[ -z "${binary[*]}" ]]; then
+        printf '[ERROR]: %s\n' "No binary to execute?"
         return 1
     fi
 
-    if ! command -v ${binary} &> /dev/null;then
-        binary=("./${binary[@]}")
+    if ls -l "${binary[*]}" &> /dev/null; then
+        printf '[INFO]: %s: ./%s' "Running from current directory" "${binary[*]}"
+        binary=("./${binary[*]}")
+    elif command -v "${binary}" &> /dev/null; then
+        printf '[INFO]: %s: %s' "Running from PATH" "$(which "${binary[*]}")"
+        binary=("${binary[*]}")
+    else
+        printf '[ERROR]: %s; %s\n' "${binary[*]}" "No such file or binary?"
+        return 1
     fi
 
     local vulkan_icd_path=${VK_ICD_FILENAMES:-"/usr/share/vulkan/icd.d/nvidia_icd.json"}
@@ -1078,10 +1284,8 @@ function nvidia() {
         DXVK_HUD=${dxvk_hud_setting}
         MANGOHUD=${mangohud_enabled}
     )
-
-    # Run the main executable
-    exec env "${environment_variables[@]}" "${binary[@]}" "${args[@]}"
-
+    # Run executable
+    exec env "${environment_variables[@]}" "${binary[*]}" "${args[@]}"
 }; alias nvrun="nvidia"
 
 ### Man but cool man

@@ -88,7 +88,7 @@ function ListProfiles() {
     local config_file="$1"
     local -a available_profiles=""
     [[ -f "${config_file}" ]] || return 1
-    LOG info "Available profiles:"
+    LOG info "Available profiles in $(ColorPath "${config_dir}"):"
     mapfile -t available_profiles < <(grep -o '^[A-Za-z_]*=(' "${config_file}" | sed 's/=(//')
     for (( i=0; i < ${#available_profiles[@]}; i++ )); do
         printf '   %s. %b\n' "$((i+1))" "${available_profiles[$i]}"

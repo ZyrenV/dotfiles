@@ -19,10 +19,10 @@ declare -a SELECTED=() CURRENTLY_PLAYING=()
 QUIET=0
 MPV_PID=0
 
-readonly MPV_SOCKET_DIR="/tmp/mpv_playing"
-readonly SOCKET="mpv_socket-$RANDOM"
-readonly MPV_SOCKET="${MPV_SOCKET_DIR}/$SOCKET"
-readonly MPV_LOG="${MPV_SOCKET_DIR}/mpv_log.log"
+# readonly MPV_SOCKET_DIR="/tmp/mpv_playing"
+# readonly SOCKET="mpv_socket-$RANDOM"
+# readonly MPV_SOCKET="${MPV_SOCKET_DIR}/$SOCKET"
+# readonly MPV_LOG="${MPV_SOCKET_DIR}/mpv_log.log"
 MUSIC_DIR="${HOME}/Music"
 
 # function cleanup() {
@@ -115,7 +115,7 @@ function TurnMusicOn() {
     local file=""
     local track_num=0
 
-    mkdir -p "${MPV_SOCKET_DIR}"
+    # mkdir -p "${MPV_SOCKET_DIR}"
 
     if [[ $mpv_ -eq 1 ]]; then
         CURRENTLY_PLAYING="$(basename "${MUSIC_DIR}/${f}")"
@@ -125,7 +125,7 @@ function TurnMusicOn() {
         for (( i=0; i < ${#files_joined[@]}; i++)); do
             track_num=$((i+1))
             file="${files_joined[$i]}"
-            quoted_files+=("'${BLUE}${MUSIC_DIR}${NC}/${LIGHT_SKIN}${file}${NC}'")
+            quoted_files+=("'${BLUE}$(ColorPath "${MUSIC_DIR}${NC}")/${LIGHT_SKIN}${file}${NC}'")
             CURRENTLY_PLAYING+=("$(basename "${MUSIC_DIR}/${file}")")
             LOG info "  ${GREY}$track_num${NC} ${LIGHT_SKIN}${CURRENTLY_PLAYING[$i]%.*}${NC}"
         done
@@ -210,7 +210,7 @@ function main() {
         Exit 1
     }
 
-    mapfile -t SELECTED < <(find "${MUSIC_DIR}" \( -type f -iregex '.*\.\(mp3\|flac\|m4a\|wav\|aac\|ogg\|opus\|wma\|alac\|ape\|mpc\|wavpack\|webm\)' \) -printf "%P\n" | fzf --multi)
+    mapfile -t SELECTED < <(find "${MUSIC_DIR}" \( -type f -iregex '.*\.\(mp3\|flac\|m4a\|wav\|aac\|ogg\|opus\|wma\|alac\|ape\|mpc\|wavpack\|webm\|mp4\)' \) -printf "%P\n" | fzf --multi)
 
     if [[ ${#SELECTED[@]} -eq 0 ]]; then
         LOG info "No song selected"
@@ -224,7 +224,7 @@ function main() {
 
     mpv_flags+=(
         "--vid=${video:-"no"}"
-        "--volume=${volume:-64}"
+        "--volume=${volume:-95}"
     )
 
     mpv_flags+=(
@@ -247,7 +247,7 @@ function main() {
         "--hwdec=vulkan"
         "--hdr-compute-peak"
         "--loop-playlist=inf"
-        "--quiet"
+        "--really-quiet"
         "--msg-level=ffmpeg/demuxer=error"
     )
 

@@ -103,7 +103,7 @@ function Install_graphics_tools() {
         xf86-video-amdgpu lib32-vulkan-radeon
         # xdg-desktop-portal-X X=wlr for sway, X=hyprland for hyprland
         xdg-desktop-portal xdg-desktop-portal-wlr
-        pastel
+        pastel wlr-randr
     )
     Pacman_install "${MSG}" "${PacmanPkgs[@]}"
 }
@@ -119,6 +119,17 @@ function Install_terminals() {
     Pacman_install "${MSG}" foot alacritty kitty konsole
 }
 
+
+function Install_Audio() {
+    MSG="Terminal Audio and Video drivers"
+    local -a PacmanPkgs=(
+    alsa-lib alsa-tools alsa-utils alsa-firmware
+    pipewire pipewire-alsa pipewire-jack pipewire-pulse
+    pipewire-session-manager
+    )
+    Pacman_install "${MSG}" "${PacmanPkgs[@]}"
+}
+
 function Install_monitors() {
     MSG="System monitoring tools"
     Pacman_install "${MSG}" htop btop ctop atop plasma-systemmonitor \
@@ -128,7 +139,7 @@ function Install_monitors() {
 
 function Install_utils() {
     MSG="Utils"
-    Pacman_install "${MSG}" 7zip xz tar rclone brightnessctl cpu-x dust gdu tree \
+    Pacman_install "${MSG}" 7zip xz tar pax rclone brightnessctl cpu-x dust gdu tree \
         tmux psmisc sysstat android-tools ansible
     AUR_install "${MSG}" nbfc-linux nbfc-gtk
 }
@@ -228,7 +239,11 @@ function Install_misc_tools() {
         syncplay ncurses carla qtractor rust rust-src ardour qt6-tools obsidian
         nvidia-container-toolkit weechat irssi blender okular krita vim git
         docker gimp wofi code python-openai-whisper perl-image-exiftool xev
-        shfmt binwalk niri
+        shfmt binwalk bat eza lsd vsftpd wget curl fuzzel fastfetch
+        kate bind
+        edk2-ovmf # bios
+        swtpm # tpm chip support for qemu
+        cloc # Count lines of code
     )
 
     local -a AurPkgs=(
