@@ -48,5 +48,8 @@ function show_current_branch() {
 PROMPT_COMMAND='PS1="${opening_bracket} ${username}@${hostname}:${workingdirectory} ${closing_bracket} $ $(show_current_branch)"'
 
 source "$HOME/.cargo/env" 2> /dev/null
-source "$HOME/.shell_rc" 2> /dev/null
+if source ${HOME}/.shell_rc 2> /dev/null; then
+    SetPath
+    SSH_Agent
+fi
 

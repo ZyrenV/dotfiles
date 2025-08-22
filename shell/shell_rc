@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# vim:filetype=bash
+
 
 THIS_FILE="$0"
 
@@ -197,7 +199,7 @@ function RotTransform() {
 
     if [[ "${operation_type}" == "encode" ]]; then
         operation=("${Enc[@]}")
-    else
+    elif [[ "${operation_type}" == "decode" ]]; then
         operation=("${Dec[@]}")
     fi
 
@@ -503,7 +505,8 @@ function Compile() {
     local -a args=("$@")
     local -a files=()
     local -a cmd_flags=() c_sources=() cpp_sources=()
-    local arg="" out_="" output="main___" CC_="gcc"
+    local arg="" out_="" output="main__" CC_="gcc"
+    local output_type="captured"
     local -i remove_output=0 debug=0
 
     arg=""; for ((i=0; i < ${#args[@]}; i++ )); do
@@ -520,12 +523,15 @@ function Compile() {
                     output="${arg#*=}"
                     [[ -z "${output}" ]] && output="main___"
                     ;;
-                -clang|--clang)
+                -*clang)
                     CC_="clang"
                     ;;
-                -clang=*|--clang=*)
+                -*clang=*)
                     CC_="${arg#*=}"
                     [[ -z "${CC_}" ]] && CC_="gcc"
+                    ;;
+                -*def*)
+                    output_type="default"
                     ;;
                 *)
                     LOG error "Invalid flag: '${arg}'"
@@ -552,18 +558,26 @@ function Compile() {
     done
 
     if [[ ${#cpp_sources[@]} > 0 ]]; then
-        cmd_flags=()
-        cmd_flags+=( "-x" "c++" "-std=c++20" )
-        cmd_flags+=( "-lstdc++" )
-        cmd_flags+=( "-pedantic" "-Wall" "-Wextra" "-Werror" )
+        cmd_flags=( "-x" "c++" "-std=c++20" )
+        cmd_flags+=( "-lstdc++" "-lm" )
+        cmd_flags+=( "-pedantic" "-Wall" "-Wextra" "-Werror" "-fno-elide-constructors" )
         [[ $debug -eq 1 ]] && cmd_flags+=( "-DDEBUG" )
-        cmd_flags+=( "-fno-elide-constructors" )
 
         LOG info "$CC_ ${cmd_flags[*]} ${cpp_sources[*]} -o ${output}"
         $CC_ "${cmd_flags[@]}" "${cpp_sources[@]}" -o "${output}"
+        if [[ $? -ne 0 ]]; then
+            LOG error "Compilation failed"
+            return 1
+        fi
         LOG info "Running: ${output}: "
+
+        if [[ "${output_type}" != "captured" ]]; then
+            ./"${output}"
+            return $?
+        fi
+
         local lines out_
-        if ! out_="$(./${output})"; then
+        if ! out_="$(./"${output}")"; then
             LOG error "Execution failed"
         fi
 
@@ -584,16 +598,26 @@ function Compile() {
     fi
 
     if [[ ${#c_sources[@]} > 0 ]]; then
-        cmd_flags=()
-        cmd_flags+=( "-lstdc++" )
+        cmd_flags=( "-x" "c" "-std=c99" )
+        cmd_flags+=( "-lstdc++" "-lm" )
         cmd_flags+=( "-pedantic" "-Wall" "-Wextra" "-Werror" )
         [[ $debug -eq 1 ]] && cmd_flags+=( "-DDEBUG" )
 
         LOG info "$CC_ ${cmd_flags[*]} ${c_sources[*]} -o ${output}"
         $CC_ "${cmd_flags[@]}" "${c_sources[@]}" -o "${output}"
+        if [[ $? -ne 0 ]]; then
+            LOG error "Compilation failed"
+            return 1
+        fi
         LOG info "Running: ${output}: "
+
+        if [[ "${output_type}" != "captured" ]]; then
+            ./"${output}"
+            return $?
+        fi
+
         local lines out_
-        if ! out_="$(./${output})"; then
+        if ! out_="$(./"${output}")"; then
             LOG error "Execution failed"
         fi
 
@@ -653,8 +677,8 @@ function sway_vulkan() {
 }
 
 ### Set the path with default locations
-function setPath() {
-    PATH+=: PATH+="/usr/local/bin:/usr/local/sbin:/usr/sbin:/sbin:/bin"
+function SetPath() {
+    PATH+=: PATH+="/usr/sbin:/sbin:/bin:/usr/local/bin:/usr/local/sbin"
     PATH+=: PATH+="${HOME}/.bin:${HOME}/.local/bin"
     PATH+=: PATH+="${HOME}/.cargo/bin:${HOME}/.npm_global/bin:${BREW}/bin"
 
@@ -662,13 +686,13 @@ function setPath() {
     if [[ ! -s "${tmp_path}" ]] ;then
         echo "$PATH" &> "${tmp_path}"
     else
-        PATH="$(cat ${tmp_path})"
+        PATH="$(cat "${tmp_path}")"
         export PATH
     fi
 }
 
 ### Show all the paths in $PATH
-function Paths() {
+function ShowPath() {
     [[ -n $ZSH_VERSION ]] && emulate -LR bash
     local IFS=$':' i=0
     for path in $PATH; do
@@ -678,13 +702,13 @@ function Paths() {
 }; alias show_path="Paths"; alias print_path="Paths"
 
 ### Start SSH agent on initial login
-function SSHAgent() {
+function SSH_Agent() {
     local ssh_agent="/tmp/.ssh_agent"
     if [[ ! -s "${ssh_agent}" ]]; then
         touch "${ssh_agent}"
         echo "$(ssh-agent -s)" > "${ssh_agent}"
     else
-        source ${ssh_agent} &> /dev/null
+        source "${ssh_agent}" &> /dev/null
     fi
 }
 
@@ -749,7 +773,7 @@ function gpt() {
     esac
 }; alias devgpt='gpt dev'; alias gptimg='gpt img'
 
-### Pretty cat with colors
+### Pretty `cat` like command with colors
 function catbat() {
     local -a args=("$@")
     local -a batargs=()
@@ -764,14 +788,36 @@ function catbat() {
         esac
     done
     /usr/bin/bat --theme-dark=TwoDark --color=always --decorations=never --paging=never "${batargs[@]}"
+}; alias Cat="catbat"
+
+### Pretty `less` like command with colors
+function Less() {
+    local -a args=("$@")
+    local -a batargs=()
+    for arg in "${args[@]}"; do
+        case "${arg}" in
+            *.conf)
+                batargs+=("--language=ini" "${arg}")
+                ;;
+            *)
+                batargs+=("${arg}")
+                ;;
+        esac
+    done
+    /usr/bin/bat --theme-dark=TwoDark --color=always --decorations=never --paging=always "${batargs[@]}"
 }
 
 ### Temporay writing
 function t() {
-    local TEMP_FILE="$(mktemp -t TEMP_WRITE_DUMP.XXXX)"
-    "${EDITOR}" "${TEMP_FILE}";
-    cat "${TEMP_FILE}"
-    rm "${TEMP_FILE}"
+    local temp_file="$(mktemp -t temp_edit_.XXXX)"
+    local session_type=""
+    "${EDITOR}" "${temp_file}"
+    if [[ "${XDG_SESSION_TYPE}" == wayland ]]; then
+        wl-copy < "${temp_file}" && LOG info "Wayland copy"
+    elif [[ "${XDG_SESSION_TYPE}" == x11 ]]; then
+        xsel < "${temp_file}" && LOG info "x11 copy"
+    fi
+    rm "${temp_file}"
 }
 
 ### Spanish lessons
@@ -855,6 +901,90 @@ function y() {
         builtin cd -- "${cwd}"
     fi
     rm -f -- "${tmp}"
+}
+
+# sysstat: lightweight stats (net + disk)
+sysstat() {
+    local iface="${1:-wlo1}"      # network iface (default wlo1)
+    local dev="${2:-nvme0n1}"     # block device (default nvme0n1)
+    local interval="${3:-1}"      # interval seconds
+    local iterations="${4:-1}"    # how many iterations (default 1, -1=infinite)
+
+    # --- paths ---
+    local rx_path="/sys/class/net/$iface/statistics/rx_bytes"
+    local tx_path="/sys/class/net/$iface/statistics/tx_bytes"
+    local stat_path="/sys/block/$dev/stat"
+    local st_dir="/sys/block/$dev/statistics"
+
+    [[ ! -e $rx_path ]] && { echo "No such iface: $iface"; return 1; }
+    [[ ! -e $stat_path ]] && { echo "No such block dev: $dev"; return 1; }
+
+    # --- helpers ---
+    human() {
+        local bytes=$1
+        if (( bytes > 1073741824 )); then
+            awk -v b=$bytes 'BEGIN{printf "%.2f GiB", b/1073741824}'
+        elif (( bytes > 1048576 )); then
+            awk -v b=$bytes 'BEGIN{printf "%.2f MiB", b/1048576}'
+        elif (( bytes > 1024 )); then
+            awk -v b=$bytes 'BEGIN{printf "%.2f KiB", b/1024}'
+        else
+            printf "%d B" "$bytes"
+        fi
+    }
+
+    get_disk_bytes() {
+        if [[ -r "$st_dir/read_bytes" && -r "$st_dir/write_bytes" ]]; then
+            # some block devices export these
+            local rd=$(<"$st_dir/read_bytes")
+            local wr=$(<"$st_dir/write_bytes")
+            echo "$rd $wr"
+        else
+            # fallback to parsing /stat
+            # field3=sectors_read, field7=sectors_written
+            awk '{print $3*512, $7*512}' "$stat_path"
+        fi
+    }
+
+    # one-shot totals
+    if (( iterations == 1 )); then
+        local rx=$(<"$rx_path") tx=$(<"$tx_path")
+        read -r rd wr < <(get_disk_bytes)
+
+        echo "Total Download: $(human $rx)"
+        echo "Total Upload:   $(human $tx)"
+        echo "Disk Read:      $(human $rd)"
+        echo "Disk Write:     $(human $wr)"
+        return 0
+    fi
+
+    # realtime mode
+    local prev_rx=$(<"$rx_path") prev_tx=$(<"$tx_path")
+    read -r prev_rd prev_wr < <(get_disk_bytes)
+
+    printf "\n"
+    while :; do
+        sleep "$interval"
+        local rx=$(<"$rx_path") tx=$(<"$tx_path")
+        read -r rd wr < <(get_disk_bytes)
+
+        local drx=$((rx - prev_rx))
+        local dtx=$((tx - prev_tx))
+        local drd=$((rd - prev_rd))
+        local dwr=$((wr - prev_wr))
+
+        printf "\033[1A\033[2K"
+        printf "%s | Net ↓ %s/s ↑ %s/s | Disk R %s/s W %s/s\n" \
+            "$(date +%T)" \
+            "$(human $drx)" \
+            "$(human $dtx)" \
+            "$(human $drd)" \
+            "$(human $dwr)"
+
+        prev_rx=$rx prev_tx=$tx prev_rd=$rd prev_wr=$wr
+        (( iterations > 0 )) && (( --iterations == 0 )) && break
+    done
+    unset -f get_disk_bytes human
 }
 
 ### Terminal file explorer with cd tracking
@@ -945,7 +1075,7 @@ function SetPower() {
 }
 
 function browser() {
-    local firefox_profile="$1" browser
+    local firefox_profile="$1" Browser
     local firefox_profile_dir="${HOME}/.profiles"
 
     if ! [[ "${XDG_SESSION_DESKTOP}" == "sway" ]]; then
@@ -954,10 +1084,10 @@ function browser() {
     fi
 
     if command -v waterfox &> /dev/null; then
-        browser="waterfox"
+        Browser="waterfox"
     elif command -v firefox &> /dev/null; then
         LOG info "Waterfox not found, using firefox"
-        browser="firefox"
+        Browser="firefox"
     else
         LOG error "Waterfox not installed"
         return 1
@@ -971,14 +1101,16 @@ function browser() {
         firefox_profile="${firefox_profile}"
     fi
 
-    waterfox --profile "${firefox_profile}" &> /dev/null & disown
+    LOG info "$Browser --profile ${firefox_profile} &> /dev/null & disown"
+    $Browser --profile "${firefox_profile}" &> /dev/null & disown
     timeout --signal SIGKILL 6s bash -c "
-        while [[ \"\$(swaymsg -t get_tree -r | jq -r '.. | select(type == \"object\" and .app_id == \"${browser}\") | .app_id'; sleep 0.01)\" != \"${browser}\" ]]; do
+        while ! swaymsg -t get_tree -r | jq -e '.. | select(type == \"object\" and (.app_id? | type == \"string\" and test(\"^${Browser}\")))' > /dev/null; do
             sleep 0.01
         done
         sleep 0.2
         swaymsg '[app_id=\"${Browser}\"] resize set width 1444 height 784'
     "
+    exit 0
 }
 
 ### Download any video
@@ -1004,7 +1136,11 @@ function Ip() {
 ### Update grub
 function UpdateGrub() {
     sudo grub-mkconfig -o /boot/grub/grub.cfg
+}
 
+### Run neovim with sudo
+function sudo_nvim() {
+  sudo env WAYLAND_DISPLAY=$WAYLAND_DISPLAY DISPLAY=$DISPLAY nvim "$@"
 }
 
 ### Sort by file size
@@ -1049,18 +1185,30 @@ function Steam() {
     DRI_PRIME=1 __NV_PRIME_RENDER_OFFLOAD=1 __VK_LAYER_NV_optimus=NVIDIA_only __GLX_VENDOR_LIBRARY_NAME=nvidia steam
 }
 
+function Font() {
+    local font_name="$1"
+    fc-list | grep -o -i "${font_name}.*\." | awk -F'.' '{ print $1 }' | tr '-' ' '
+}
+
 ### Run with nvidia
 function nvidia() {
-    local binary=("$1"); shift
+    local -a binary=("$1"); shift
     local -a args=("$@")
 
-    if [[ -z "${binary}" ]];then
-        LOG error "No game binary?"
+    if [[ -z "${binary[*]}" ]]; then
+        printf '[ERROR]: %s\n' "No binary to execute?"
         return 1
     fi
 
-    if ! command -v ${binary} &> /dev/null;then
-        binary=("./${binary[@]}")
+    if ls -l "${binary[*]}" &> /dev/null; then
+        printf '[INFO]: %s: ./%s' "Running from current directory" "${binary[*]}"
+        binary=("./${binary[*]}")
+    elif command -v "${binary}" &> /dev/null; then
+        printf '[INFO]: %s: %s' "Running from PATH" "$(which "${binary[*]}")"
+        binary=("${binary[*]}")
+    else
+        printf '[ERROR]: %s; %s\n' "${binary[*]}" "No such file or binary?"
+        return 1
     fi
 
     local vulkan_icd_path=${VK_ICD_FILENAMES:-"/usr/share/vulkan/icd.d/nvidia_icd.json"}
@@ -1078,10 +1226,8 @@ function nvidia() {
         DXVK_HUD=${dxvk_hud_setting}
         MANGOHUD=${mangohud_enabled}
     )
-
-    # Run the main executable
-    exec env "${environment_variables[@]}" "${binary[@]}" "${args[@]}"
-
+    # Run executable
+    exec env "${environment_variables[@]}" "${binary[*]}" "${args[@]}"
 }; alias nvrun="nvidia"
 
 ### Man but cool man

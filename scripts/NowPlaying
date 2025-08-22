@@ -56,7 +56,7 @@ function CheckPlay() {
                 -e 's/\n/\\n/g' \
                 -e 's/\f/\\f/g')"
 
-            # echo "You are playing: ${combined}"
+            echo "You are playing: ${combined}"
             echo "{\"text\": \"${combined}\", \"class\": \"active\"}" | socat - UNIX-CONNECT:"${MPV_SOCKET}"
             isPlaying=1
             break
@@ -69,7 +69,7 @@ function CheckPlay() {
 while true; do
     CheckPlay
     [[ $isPlaying -eq 0 ]] && {
-        # echo "You are not playing anything"
+        echo "You are not playing anything"
         echo '{"text": "", "class": "inactive"}' | socat - UNIX-CONNECT:"${MPV_SOCKET}"
     }
     sleep 0.3

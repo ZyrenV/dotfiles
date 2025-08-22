@@ -111,9 +111,6 @@ function ValidatePaths() {
         if [[ ! -e "${src}" ]]; then
             ERROR "Invalid path: $src"
             valid=1
-        elif [[ ! -e "${dest}" ]]; then
-            ERROR "Invalid path: $dest"
-            valid=1
         fi
     done
     return $valid
@@ -126,9 +123,6 @@ function ValidateDirPaths() {
         IFS=$'|' read -r src dest recursive_flag <<< "${pair}"
         if [[ ! -e "${src}" ]]; then
             ERROR "Invalid path: ${src}"
-            valid=1
-        elif [[ ! -e "${dest}" ]]; then
-            ERROR "Invalid path: ${dest}"
             valid=1
         elif [[ -z $recursive_flag ]]; then
             ERROR "Recursive flag not given to '$(ColorPath "${pair}")'"
@@ -354,80 +348,78 @@ function main() {
 
     for (( i=0 ; i < ${#flagArr[@]} ; i++ )); do
         arg="${flagArr[$i]}"
-        if [[ "${arg}" == -* ]]; then
-            case "${arg}" in
-                -v|--verbose|--progress|verbose)
+        case "${arg}" in
+            -v|-*verbose|-*progress|verbose)
+                LOG_LEVEL=1
+                DEBUG_LOG "Verbose is set"
+                ;;
+            -l=*|-*log*=*|log*=*)
+                LOG_LEVEL=${arg#*=}
+                if [[ -z ${LOG_LEVEL} || ${LOG_LEVEL} == -* ]] || [[ ! ${LOG_LEVEL} =~ ^[0-9]+$ ]]; then
                     LOG_LEVEL=1
-                    DEBUG_LOG "Verbose is set"
-                    ;;
-                -l=*|--log=*|log=*|--loglevel=*|--log-level=*|loglevel=*)
-                    LOG_LEVEL=${arg#*=}
-                    if [[ -z ${LOG_LEVEL} || ${LOG_LEVEL} == -* ]] || [[ ! ${LOG_LEVEL} =~ ^[0-9]+$ ]]; then
-                        LOG_LEVEL=1
-                    elif [[ $LOG_LEVEL -gt 3 ]]; then
-                        DEBUG_LOG "LOG_LEVEL has no effect over integer ${LOG_LEVEL}"
-                    fi
-                    [[ $LOG_LEVEL -ge 3 ]] && DEBUG_LOG "Debugging enabled"
-                    ;;
-                -l|--log|log|--loglevel|--log-level|loglevel)
-                    LOG_LEVEL=${flagArr[$(( i + 1 ))]:-1}
+                elif [[ $LOG_LEVEL -gt 3 ]]; then
+                    DEBUG_LOG "LOG_LEVEL has no effect over integer ${LOG_LEVEL}"
+                fi
+                [[ $LOG_LEVEL -ge 3 ]] && DEBUG_LOG "Debugging enabled"
+                ;;
+            -l|-*log*|log*)
+                LOG_LEVEL=${flagArr[$(( i + 1 ))]:-1}
 
-                    if [[ -z ${LOG_LEVEL} || ${LOG_LEVEL} == -* ]]; then
-                        LOG_LEVEL=1
-                    elif [[ $LOG_LEVEL -gt 3 ]]; then
-                        DEBUG_LOG "LOG_LEVEL has no effect over integer ${LOG_LEVEL}"
-                    fi
-                    [[ $LOG_LEVEL -ge 3 ]] && DEBUG_LOG "Debugging enabled"
+                if [[ -z ${LOG_LEVEL} || ${LOG_LEVEL} == -* ]]; then
+                    LOG_LEVEL=1
+                elif [[ $LOG_LEVEL -gt 3 ]]; then
+                    DEBUG_LOG "LOG_LEVEL has no effect over integer ${LOG_LEVEL}"
+                fi
+                [[ $LOG_LEVEL -ge 3 ]] && DEBUG_LOG "Debugging enabled"
+                i=$(( i + 1 ))
+                ;;
+            -d-*debug|debug)
+                LOG_LEVEL=2
+                DEBUG_LOG "Debugging enabled"
+                ;;
+            -g|-*gs|-*git*stat*|git*stat*)
+                git_status=1
+                DEBUG_LOG "git_status is set"
+                ;;
+            -e|-*edit|edit)
+                EditConfig "${CONFIG_FILE}"
+                return 0
+                ;;
+            -c|--clone*|clone*)
+                clone_dir="${flagArr[$(( i + 1 ))]}"
+                [[ -n "${clone_dir}" ]] && {
                     i=$(( i + 1 ))
-                    ;;
-                -d|-db|--db|--deb|--debug|debug)
-                    LOG_LEVEL=2
-                    DEBUG_LOG "Debugging enabled"
-                    ;;
-                -g|-gs|--gs|--status|--git-status|--gitstatus|g)
-                    git_status=1
-                    DEBUG_LOG "git_status is set"
-                    ;;
-                -e|--edit|edit)
-                    EditConfig "${CONFIG_FILE}"
-                    return 0
-                    ;;
-                -c|--clone|--clone-local|clone)
-                    clone_dir="${flagArr[$(( i + 1 ))]}"
-                    [[ -n "${clone_dir}" ]] && {
-                        i=$(( i + 1 ))
-                    }
-                    should_clone=1
-                    ;;
-                -c=*|--clone=*|--clone-local=*|clone=*)
-                    clone_dir="${arg#*=}"
-                    should_clone=1
-                    ;;
-                -m|-msg|--msg)
-                    MSG="${flagArr[$(( i + 1 ))]}"
-                    [[ -n "${MSG}" ]] && {
-                        i=$(( i + 1 ))
-                    }
-                    should_clone=1
-                    ;;
-                -p|--push|push)
-                    should_push=1
-                    LOG_LEVEL=2
-                    DEBUG_LOG "Backup will be pushed to github"
-                    ;;
-                --force)
-                    force="--force"
-                    DEBUG_LOG "Forcing push"
-                    ;;
-                -h|--help|help)
-                    Usage
-                    return 0
-                    ;;
-                *)
-                    ERROR "Invalid flag: $arg"
-                    ;;
-            esac
-        fi
+                }
+                should_clone=1
+                ;;
+            -c=*|-*clone*=*)
+                clone_dir="${arg#*=}"
+                should_clone=1
+                ;;
+            -m|-*msg)
+                MSG="${flagArr[$(( i + 1 ))]}"
+                [[ -n "${MSG}" ]] && {
+                    i=$(( i + 1 ))
+                }
+                should_clone=1
+                ;;
+            -p|-*push|push)
+                should_push=1
+                LOG_LEVEL=2
+                DEBUG_LOG "Backup will be pushed to github"
+                ;;
+            -*force)
+                force="--force"
+                DEBUG_LOG "Forcing push"
+                ;;
+            -h|-*help|help)
+                Usage
+                return 0
+                ;;
+            *)
+                ERROR "Invalid flag: $arg"
+                ;;
+        esac
     done
 
     SourceConfig "${CONFIG_FILE}"
@@ -476,8 +468,13 @@ function main() {
     done
 
     if [[ ${git_status} -eq 1 ]]; then
+        printf '\n\n'
         cd ${GIT_DIR}
-        git status &> /dev/null || ERROR "Not a git repository"
+        if git status &> /dev/null; then
+            git status
+        else
+            ERROR "Not a git repository"
+        fi
     fi
 
     echo && INFO "Dotfile directory: ${BLUE}$(ColorPath ${GIT_DIR})${NC}\n"

@@ -25,6 +25,7 @@ function main() {
 
     set_background
     sleep 0.04 && swaymsg 'output * power off'
+    # systemctl suspend
 }
 
 main "$@"
